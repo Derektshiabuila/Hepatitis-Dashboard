@@ -194,6 +194,74 @@ def fetch_all_virus_metadata(filters: VirusFilter, page_size=200):
 
     return reports
 
+def fetch_all_virus_metadata_via_entrez(taxid: str, min_len: int, max_len: int, email: str) -> List[VirusReport]:
+    Entrez.email = email
+    query = f"txid{taxid}[Organism] AND {min_len}:{max_len}[SLEN]"
+    print(f"[NCBI] Running Entrez search: {query}")
+    
+    # 1. Search for matching GIs
+    max_search_retries = 3
+    gis = []
+    for attempt in range(max_search_retries):
+        try:
+            handle = Entrez.esearch(db="nucleotide", term=query, retmax=100000)
+            record = Entrez.read(handle)
+            handle.close()
+            gis = record["IdList"]
+            print(f"[NCBI] Found {record['Count']} total matches in Entrez.")
+            break
+        except Exception as e:
+            if attempt == max_search_retries - 1:
+                print(f"[FATAL] Entrez esearch failed: {e}")
+                raise e
+            sleep_time = (2 ** attempt) + 2
+            print(f"[WARNING] Entrez esearch failed: {e}. Retrying in {sleep_time}s...")
+            time.sleep(sleep_time)
+
+    if not gis:
+        print("[NCBI] No matching sequences found.")
+        return []
+
+    # 2. Convert GIs to Accessions in batches of 500
+    accessions = []
+    batch_size = 500
+    print(f"[NCBI] Converting {len(gis)} GIs to accessions in batches of {batch_size}...")
+    for i in range(0, len(gis), batch_size):
+        batch_gis = gis[i:i + batch_size]
+        for attempt in range(3):
+            try:
+                handle = Entrez.efetch(db="nucleotide", id=",".join(batch_gis), rettype="acc", retmode="text")
+                batch_accs = handle.read().strip().split("\n")
+                handle.close()
+                accessions.extend([acc.strip() for acc in batch_accs if acc.strip()])
+                time.sleep(0.35)
+                break
+            except Exception as e:
+                if attempt == 2:
+                    print(f"[FATAL] Entrez efetch failed for batch {i}: {e}")
+                    raise e
+                sleep_time = (2 ** attempt) + 2
+                print(f"[WARNING] Entrez efetch failed: {e}. Retrying in {sleep_time}s...")
+                time.sleep(sleep_time)
+
+    # 3. Fetch metadata for these accessions in batches of 200
+    reports = []
+    datasets_batch_size = 200
+    print(f"[NCBI] Fetching Datasets metadata for {len(accessions)} accessions in batches of {datasets_batch_size}...")
+    for i in range(0, len(accessions), datasets_batch_size):
+        batch_accs = accessions[i:i + datasets_batch_size]
+        payload = VirusRequestPayload(
+            filter=VirusFilter(accessions=batch_accs),
+            page_size=datasets_batch_size
+        )
+        response = fetch_virus_metadata(payload)
+        if response.reports:
+            reports.extend(response.reports)
+        time.sleep(0.35)
+
+    print(f"[NCBI] Successfully retrieved {len(reports)} metadata reports.")
+    return reports
+
 ###########################################################
 # Convert nested metadata → flat dictionaries
 ###########################################################

@@ -5,8 +5,7 @@ import pandas as pd
 import re
 from Bio import Entrez
 from hepatitis_data_collection import (
-    VirusFilter,
-    fetch_all_virus_metadata,
+    fetch_all_virus_metadata_via_entrez,
     parse_response_to_dictionaries,
     fetch_sequences_batch
 )
@@ -56,8 +55,12 @@ print(f"Fetching NCBI metadata for {virus.upper()} (taxid={taxid})")
 # -----------------------------
 # Fetch metadata
 # -----------------------------
-filters = VirusFilter(taxon=taxid)
-records = fetch_all_virus_metadata(filters=filters)
+records = fetch_all_virus_metadata_via_entrez(
+    taxid=taxid,
+    min_len=minlength,
+    max_len=maxlength,
+    email=email
+)
 
 df = pd.DataFrame(parse_response_to_dictionaries(records))
 
