@@ -238,7 +238,8 @@ EOF
               java -jar /opt/gluetools/lib/gluetools-core.jar -c /work/gluetools-config_$SAMPLE.xml -f /work/glue_cmd_$SAMPLE.glue -n || true
         
             if [ -f "results/{wildcards.virus}/result.xml" ]; then
-                mv results/{wildcards.virus}/result.xml {output.xml}
+                cp results/{wildcards.virus}/result.xml {output.xml}
+                rm -f results/{wildcards.virus}/result.xml
                 rm -f results/{wildcards.virus}/gluetools-config_$SAMPLE.xml results/{wildcards.virus}/glue_cmd_$SAMPLE.glue
                 exit 0
             fi

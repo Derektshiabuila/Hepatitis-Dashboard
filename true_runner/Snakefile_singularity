@@ -308,7 +308,8 @@ EOF
             fi
 
             if [ -f "results/hbv/result.xml" ]; then
-                mv results/hbv/result.xml "{output}"
+                cp results/hbv/result.xml "{output}"
+                rm -f results/hbv/result.xml
                 rm -f results/hbv/gluetools-config_$SAMPLE.xml results/hbv/glue_cmd_$SAMPLE.glue
                 echo "✅ Success: {output}"
                 exit 0
@@ -491,7 +492,8 @@ EOF
             fi
 
             if [ -f "results/hcv/result.xml" ]; then
-                mv results/hcv/result.xml "{output}"
+                cp results/hcv/result.xml "{output}"
+                rm -f results/hcv/result.xml
                 rm -f results/hcv/gluetools-config_$SAMPLE.xml results/hcv/glue_cmd_$SAMPLE.glue
                 echo "✅ Success: {output}"
                 exit 0
