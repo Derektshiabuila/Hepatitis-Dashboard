@@ -10,6 +10,7 @@ OUTPUT_DIR=$3
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
+OUTPUT_DIR=$(realpath "$OUTPUT_DIR")
 
 # Copy FASTA to work directory (create split_fasta subdir as expected by GLUE)
 mkdir -p "$OUTPUT_DIR/split_fasta"

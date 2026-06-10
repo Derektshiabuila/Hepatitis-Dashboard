@@ -139,7 +139,7 @@ def _resolve_conda_bin(binary: str, env_name: str = "phylo") -> str:
 
 
 JOBS_DIR        = Path(_env("HEP_JOBS_DIR",        "/tmp/hep_dash_jobs"))
-PROJECT_ROOT    = Path(_env("HEP_PROJECT_ROOT",    os.getcwd()))
+PROJECT_ROOT    = Path(_env("HEP_PROJECT_ROOT",    os.getcwd())).resolve()
 REF_MSA_DIR     = Path(_env("HEP_REF_MSA_DIR",     PROJECT_ROOT / "refs"))
 REF_TREE_DIR    = Path(_env("HEP_REF_TREE_DIR",    PROJECT_ROOT / "refs"))
 REF_ANNOT_DIR   = Path(_env("HEP_REF_ANNOT_DIR",   PROJECT_ROOT / "refs"))

@@ -174,7 +174,7 @@ rule hbv_glue:
         TIMEOUT={params.timeout_sec}
 
         RETRY_COUNT=0
-        CURRENT_DIR=$(pwd)
+        CURRENT_DIR=$(realpath .)
 
         while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
 
@@ -249,7 +249,7 @@ rule hcv_glue:
         TIMEOUT={params.timeout_sec}
 
         RETRY_COUNT=0
-        CURRENT_DIR=$(pwd)
+        CURRENT_DIR=$(realpath .)
 
         while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
 

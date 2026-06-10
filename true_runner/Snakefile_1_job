@@ -106,7 +106,7 @@ EOF
             timeout --signal=SIGKILL 300s docker run --rm \
               --platform linux/amd64 \
               --link gluetools-mysql-{wildcards.virus}:gluetools-mysql \
-              -v $(pwd)/results/{wildcards.virus}:/work \
+              -v $(realpath results/{wildcards.virus}):/work \
               -v /tmp/glue_cmd_$SAMPLE.glue:/tmp/glue_cmd.glue \
               cvrbioinformatics/gluetools:latest \
               gluetools.sh -f /tmp/glue_cmd.glue -n || true

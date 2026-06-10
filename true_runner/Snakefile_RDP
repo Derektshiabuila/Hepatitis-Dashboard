@@ -125,7 +125,7 @@ EOF
 			  -e MAFFT_NTHREAD=1 \
 			  -e OMP_NUM_THREADS=1 \
 			  -e OPENBLAS_NUM_THREADS=1 \
-			  -v $(pwd)/results/{wildcards.virus}:/work \
+			  -v $(realpath results/{wildcards.virus}):/work \
 			  -v /tmp/glue_cmd_$SAMPLE.glue:/tmp/glue_cmd.glue \
 			  cvrbioinformatics/gluetools:latest \
 			  gluetools.sh -f /tmp/glue_cmd.glue -n || true
