@@ -3,7 +3,6 @@ import dash_bootstrap_components as dbc
 from dash import ctx
 from dash import callback_context as ctx
 from datetime import datetime
-from weasyprint import HTML
 from dash.exceptions import PreventUpdate
 
 
