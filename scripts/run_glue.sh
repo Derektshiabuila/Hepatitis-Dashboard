@@ -90,8 +90,7 @@ for i in $(seq 1 30); do
 done
 
 # Generate a temporary config file with allowPublicKeyRetrieval=true to bypass MySQL 8.0/driver connection issues
-TEMP_CONFIG=$(mktemp /tmp/gluetools-config.XXXXXX)
-cat > "$TEMP_CONFIG" << 'EOF'
+cat > "$OUTPUT_DIR/gluetools-config.xml" << 'EOF'
 <gluetools>
 	<database>
 		<username>gluetools</username>
@@ -204,11 +203,10 @@ docker run --rm \
     --platform linux/amd64 \
     --link "${MYSQL_CONTAINER}:gluetools-mysql" \
     -v "$OUTPUT_DIR:/work" \
-    -v "$TEMP_CONFIG:/opt/gluetools/conf/gluetools-config.xml" \
     cvrbioinformatics/gluetools:latest \
-    gluetools.sh -f /work/glue_cmd.glue -n
+    java -jar /opt/gluetools/lib/gluetools-core.jar -c /work/gluetools-config.xml -f /work/glue_cmd.glue -n
 
-rm -f "$TEMP_CONFIG"
+rm -f "$OUTPUT_DIR/gluetools-config.xml"
 
 # Check if any XML output was created
 if ls "$OUTPUT_DIR"/*.xml >/dev/null 2>&1; then

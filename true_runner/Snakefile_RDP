@@ -111,7 +111,7 @@ rule glue_analysis:
             sleep 1
         done
         
-        cat > /tmp/gluetools-config_$SAMPLE.xml << EOF
+        cat > results/{wildcards.virus}/gluetools-config_$SAMPLE.xml << EOF
 <gluetools>
 	<database>
 		<username>gluetools</username>
@@ -219,36 +219,34 @@ rule glue_analysis:
 </gluetools>
 EOF
 
-	while [ $RETRY_COUNT -le $MAX_RETRIES ]; do
-	cat > /tmp/glue_cmd_$SAMPLE.glue << EOF
+        while [ $RETRY_COUNT -le $MAX_RETRIES ]; do
+        cat > results/{wildcards.virus}/glue_cmd_$SAMPLE.glue << EOF
 project {params.project}
 console set log-level INFO
 console set next-cmd-output-file /work/result.xml
 module {params.glue_module} /work/split_fasta/$SAMPLE.fasta
 EOF
         
-			timeout --signal=SIGKILL 600s docker run --rm \
-			  --platform linux/amd64 \
-			  --link gluetools-mysql-{wildcards.virus}:gluetools-mysql \
-			  -e MAFFT_NTHREAD=1 \
-			  -e OMP_NUM_THREADS=1 \
-			  -e OPENBLAS_NUM_THREADS=1 \
-			  -v $(realpath results/{wildcards.virus}):/work \
-			  -v /tmp/glue_cmd_$SAMPLE.glue:/tmp/glue_cmd.glue \
-			  -v /tmp/gluetools-config_$SAMPLE.xml:/opt/gluetools/conf/gluetools-config.xml \
-			  cvrbioinformatics/gluetools:latest \
-			  gluetools.sh -f /tmp/glue_cmd.glue -n || true
+            timeout --signal=SIGKILL 600s docker run --rm \
+              --platform linux/amd64 \
+              --link gluetools-mysql-{wildcards.virus}:gluetools-mysql \
+              -e MAFFT_NTHREAD=1 \
+              -e OMP_NUM_THREADS=1 \
+              -e OPENBLAS_NUM_THREADS=1 \
+              -v $(realpath results/{wildcards.virus}):/work \
+              cvrbioinformatics/gluetools:latest \
+              java -jar /opt/gluetools/lib/gluetools-core.jar -c /work/gluetools-config_$SAMPLE.xml -f /work/glue_cmd_$SAMPLE.glue -n || true
         
             if [ -f "results/{wildcards.virus}/result.xml" ]; then
                 mv results/{wildcards.virus}/result.xml {output.xml}
-                rm -f /tmp/gluetools-config_$SAMPLE.xml
+                rm -f results/{wildcards.virus}/gluetools-config_$SAMPLE.xml results/{wildcards.virus}/glue_cmd_$SAMPLE.glue
                 exit 0
             fi
         
             RETRY_COUNT=$((RETRY_COUNT+1))
             sleep $SLEEP_TIME
         done
-        rm -f /tmp/gluetools-config_$SAMPLE.xml
+        rm -f results/{wildcards.virus}/gluetools-config_$SAMPLE.xml results/{wildcards.virus}/glue_cmd_$SAMPLE.glue
 
 
 VIRUS="{wildcards.virus}"

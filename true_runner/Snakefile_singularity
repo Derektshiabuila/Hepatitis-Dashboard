@@ -180,83 +180,7 @@ rule hbv_glue:
 
             echo "=== Processing $SAMPLE (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES) ==="
 
-            GLUE_CMD="/tmp/glue_cmd_${SAMPLE}.glue"
-
-            cat > "$GLUE_CMD" << EOF
-project hbv
-console set log-level INFO
-console set next-cmd-output-file /work/result.xml
-module hdrReportingController invoke-function reportFastaCli /work/split_fasta/${SAMPLE}.fasta
-EOF
-
-            set +e
-            timeout "$TIMEOUT" singularity run \
-              --bind "$CURRENT_DIR/results/hbv:/work" \
-              --bind "$GLUE_CMD:/tmp/glue_cmd.glue" \
-              docker://cvrbioinformatics/gluetools:latest \
-              gluetools.sh -f /tmp/glue_cmd.glue -n
-            EXIT_CODE=$?
-            set -e
-
-            if [ "$EXIT_CODE" -eq 124 ]; then
-                echo "⚠️  Timeout after ${TIMEOUT}s for $SAMPLE"
-            fi
-
-            if [ -f "results/hbv/result.xml" ]; then
-                mv results/hbv/result.xml "{output}"
-                rm -f "$GLUE_CMD"
-                echo "✅ Success: {output}"
-                exit 0
-            fi
-
-            echo "❌ Attempt $((RETRY_COUNT+1)) failed for $SAMPLE"
-            rm -f results/hbv/result.xml "$GLUE_CMD"
-
-            RETRY_COUNT=$((RETRY_COUNT+1))
-
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                echo "⏳ Retrying in $SLEEP_TIME seconds..."
-                sleep "$SLEEP_TIME"
-            fi
-
-        done
-
-        echo "🚨 ERROR: All $MAX_RETRIES attempts failed for $SAMPLE"
-        exit 1
-        """
-
-###########################################
-# 6 — HCV GLUE Mutation Analysis
-###########################################
-rule hcv_glue:
-    input:
-        "results/hcv/split_fasta/{sample}.fasta"
-    output:
-        "results/hcv/glue/{sample}.xml"
-    resources:
-        gluemysql=1
-    params:
-        retries=3,
-        sleep_time=10,
-        timeout_sec=300
-    shell:
-        r"""
-        set -euo pipefail
-
-        SAMPLE="{wildcards.sample}"
-        MAX_RETRIES={params.retries}
-        SLEEP_TIME={params.sleep_time}
-        TIMEOUT={params.timeout_sec}
-
-        RETRY_COUNT=0
-        CURRENT_DIR=$(realpath .)
-
-        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-
-            echo "=== Processing HCV sample $SAMPLE (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES) ==="
-
-            GLUE_CONFIG="/tmp/gluetools_config_hcv_${SAMPLE}.xml"
-            cat > "$GLUE_CONFIG" << EOF
+            cat > results/hbv/gluetools-config_$SAMPLE.xml << EOF
 <gluetools>
 	<database>
 		<username>gluetools</username>
@@ -364,9 +288,188 @@ rule hcv_glue:
 </gluetools>
 EOF
 
-            GLUE_CMD="/tmp/glue_cmd_hcv_${SAMPLE}.glue"
+            cat > results/hbv/glue_cmd_$SAMPLE.glue << EOF
+project hbv
+console set log-level INFO
+console set next-cmd-output-file /work/result.xml
+module hdrReportingController invoke-function reportFastaCli /work/split_fasta/${SAMPLE}.fasta
+EOF
 
-            cat > "$GLUE_CMD" << EOF
+            set +e
+            timeout "$TIMEOUT" singularity run \
+              --bind "$CURRENT_DIR/results/hbv:/work" \
+              docker://cvrbioinformatics/gluetools:latest \
+              java -jar /opt/gluetools/lib/gluetools-core.jar -c /work/gluetools-config_$SAMPLE.xml -f /work/glue_cmd_$SAMPLE.glue -n
+            EXIT_CODE=$?
+            set -e
+
+            if [ "$EXIT_CODE" -eq 124 ]; then
+                echo "⚠️  Timeout after ${TIMEOUT}s for $SAMPLE"
+            fi
+
+            if [ -f "results/hbv/result.xml" ]; then
+                mv results/hbv/result.xml "{output}"
+                rm -f results/hbv/gluetools-config_$SAMPLE.xml results/hbv/glue_cmd_$SAMPLE.glue
+                echo "✅ Success: {output}"
+                exit 0
+            fi
+
+            echo "❌ Attempt $((RETRY_COUNT+1)) failed for $SAMPLE"
+            rm -f results/hbv/result.xml results/hbv/gluetools-config_$SAMPLE.xml results/hbv/glue_cmd_$SAMPLE.glue
+
+            RETRY_COUNT=$((RETRY_COUNT+1))
+
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "⏳ Retrying in $SLEEP_TIME seconds..."
+                sleep "$SLEEP_TIME"
+            fi
+
+        done
+
+        rm -f results/hbv/gluetools-config_$SAMPLE.xml results/hbv/glue_cmd_$SAMPLE.glue
+        echo "🚨 ERROR: All $MAX_RETRIES attempts failed for $SAMPLE"
+        exit 1
+        """
+
+###########################################
+# 6 — HCV GLUE Mutation Analysis
+###########################################
+rule hcv_glue:
+    input:
+        "results/hcv/split_fasta/{sample}.fasta"
+    output:
+        "results/hcv/glue/{sample}.xml"
+    resources:
+        gluemysql=1
+    params:
+        retries=3,
+        sleep_time=10,
+        timeout_sec=300
+    shell:
+        r"""
+        set -euo pipefail
+
+        SAMPLE="{wildcards.sample}"
+        MAX_RETRIES={params.retries}
+        SLEEP_TIME={params.sleep_time}
+        TIMEOUT={params.timeout_sec}
+
+        RETRY_COUNT=0
+        CURRENT_DIR=$(realpath .)
+
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+
+            echo "=== Processing HCV sample $SAMPLE (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES) ==="
+
+            cat > results/hcv/gluetools-config_$SAMPLE.xml << EOF
+<gluetools>
+	<database>
+		<username>gluetools</username>
+		<password>glue12345</password>
+		<jdbcUrl>jdbc:mysql://gluetools-mysql:3306/GLUE_TOOLS?characterEncoding=UTF-8&amp;useSSL=false&amp;allowPublicKeyRetrieval=true</jdbcUrl>
+	</database>
+	<properties>
+		<!-- BLAST related config -->
+	    <property>
+			<name>gluetools.core.programs.blast.blastn.executable</name>
+			<value>/opt/gluetools/blast/ncbi-blast-2.2.31+/bin/blastn</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.blast.tblastn.executable</name>
+			<value>/opt/gluetools/blast/ncbi-blast-2.2.31+/bin/tblastn</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.blast.makeblastdb.executable</name>
+			<value>/opt/gluetools/blast/ncbi-blast-2.2.31+/bin/makeblastdb</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.blast.search.threads</name>
+			<value>4</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.blast.temp.dir</name>
+			<value>/opt/gluetools/tmp/blastfiles</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.blast.db.dir</name>
+			<value>/opt/gluetools/tmp/blastdbs</value>
+		</property>
+		<!-- RAxML-specific config -->
+		<property>
+			<name>gluetools.core.programs.raxml.raxmlhpc.executable</name>
+			<value>/opt/gluetools/raxml/bin/raxmlHPC-PTHREADS-SSE3</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.raxml.raxmlhpc.cpus</name>
+			<value>4</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.raxml.temp.dir</name>
+			<value>/opt/gluetools/tmp/raxmlfiles</value>
+		</property>
+		<!-- MAFFT-specific config -->
+		<property>
+			<name>gluetools.core.programs.mafft.executable</name>
+			<value>/usr/local/bin/mafft</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.mafft.cpus</name>
+			<value>4</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.mafft.temp.dir</name>
+			<value>/opt/gluetools/tmp/mafftfiles</value>
+		</property>
+		<!-- JModelTest -->
+		<property>
+			<name>gluetools.core.programs.jmodeltester.jar</name>
+			<value>/opt/gluetools/jModelTest/lib/jModelTest.jar</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.jmodeltester.temp.dir</name>
+			<value>/opt/gluetools/tmp/jmodeltest</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.jmodeltester.cpus</name>
+			<value>4</value>
+		</property>
+		<!-- tbl2asn-->
+		<property>
+			<name>gluetools.core.programs.tbl2asn.executable</name>
+			<value>/opt/gluetools/tbl2asn/bin/tbl2asn</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.tbl2asn.temp.dir</name>
+			<value>/opt/gluetools/tmp/tbl2asn</value>
+		</property>
+		<!-- ClusterPicker -->
+		<property>
+			<name>gluetools.core.programs.clusterPicker.jarPath</name>
+			<value>/opt/gluetools/clusterPicker/lib/ClusterPicker_1.2.5.jar</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.clusterPicker.temp.dir</name>
+			<value>/opt/gluetools/tmp/clusterPicker</value>
+		</property>
+		<!-- SAM/BAM file processing -->
+		<property>
+			<name>gluetools.core.sam.temp.dir</name>
+			<value>/opt/gluetools/tmp/sam</value>
+		</property>
+		<property>
+			<name>gluetools.core.sam.cpus</name>
+			<value>4</value>
+		</property>
+		<!-- Cayenne -->
+		<property>
+			<name>cayenne.querycache.size</name>
+			<value>30000</value>
+		</property>
+	</properties>
+</gluetools>
+EOF
+
+            cat > results/hcv/glue_cmd_$SAMPLE.glue << EOF
 project hcv
 console set log-level INFO
 console set next-cmd-output-file /work/result.xml
@@ -378,14 +481,10 @@ EOF
               --platform linux/amd64 \
               --link gluetools-mysql-hcv:gluetools-mysql \
               -v "$CURRENT_DIR/results/hcv:/work" \
-              -v "$GLUE_CMD:/tmp/glue_cmd.glue" \
-              -v "$GLUE_CONFIG:/opt/gluetools/conf/gluetools-config.xml" \
               cvrbioinformatics/gluetools:latest \
-              gluetools.sh -f /tmp/glue_cmd.glue -n
+              java -jar /opt/gluetools/lib/gluetools-core.jar -c /work/gluetools-config_$SAMPLE.xml -f /work/glue_cmd_$SAMPLE.glue -n
             EXIT_CODE=$?
             set -e
-
-            rm -f "$GLUE_CONFIG"
 
             if [ "$EXIT_CODE" -eq 124 ]; then
                 echo "⚠️  Timeout after ${TIMEOUT}s for HCV sample $SAMPLE"
@@ -393,13 +492,13 @@ EOF
 
             if [ -f "results/hcv/result.xml" ]; then
                 mv results/hcv/result.xml "{output}"
-                rm -f "$GLUE_CMD"
+                rm -f results/hcv/gluetools-config_$SAMPLE.xml results/hcv/glue_cmd_$SAMPLE.glue
                 echo "✅ Success: {output}"
                 exit 0
             fi
 
             echo "❌ Attempt $((RETRY_COUNT+1)) failed for HCV sample $SAMPLE"
-            rm -f results/hcv/result.xml "$GLUE_CMD"
+            rm -f results/hcv/result.xml results/hcv/gluetools-config_$SAMPLE.xml results/hcv/glue_cmd_$SAMPLE.glue
 
             RETRY_COUNT=$((RETRY_COUNT+1))
 
@@ -410,6 +509,7 @@ EOF
 
         done
 
+        rm -f results/hcv/gluetools-config_$SAMPLE.xml results/hcv/glue_cmd_$SAMPLE.glue
         echo "🚨 ERROR: All $MAX_RETRIES attempts failed for HCV sample $SAMPLE"
         exit 1
         """
