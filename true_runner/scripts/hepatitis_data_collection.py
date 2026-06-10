@@ -168,7 +168,7 @@ def fetch_virus_metadata(payload: VirusRequestPayload, max_retries=5, backoff_fa
             print(f"[WARNING] Request failed: {e}. Retrying in {sleep_time}s (attempt {attempt + 1}/{max_retries})...")
             time.sleep(sleep_time)
 
-def fetch_all_virus_metadata(filters: VirusFilter, page_size=1000):
+def fetch_all_virus_metadata(filters: VirusFilter, page_size=200):
     reports = []
     token = None
 
@@ -189,8 +189,8 @@ def fetch_all_virus_metadata(filters: VirusFilter, page_size=1000):
             break
 
         token = response.next_page_token
-        # Sleep for 0.35s to respect NCBI API rate limit of 5 requests per second
-        time.sleep(0.35)
+        # Sleep for 0.6s to respect NCBI API rate limit of 5 requests per second across parallel jobs
+        time.sleep(0.6)
 
     return reports
 
