@@ -27,8 +27,8 @@ for virus in hbv hcv hev; do
         sleep 5
     fi
     
-    # Ensure GLUE_TOOLS database exists
-    docker exec "${container}" mysql -uroot -e "CREATE DATABASE IF NOT EXISTS GLUE_TOOLS;"
+    # Ensure GLUE_TOOLS database is clean and recreated
+    docker exec "${container}" mysql -uroot -e "DROP DATABASE IF EXISTS GLUE_TOOLS; CREATE DATABASE GLUE_TOOLS;"
     
     # Import dump
     gunzip -c "$dump_file" | docker exec -i "${container}" mysql -uroot GLUE_TOOLS
