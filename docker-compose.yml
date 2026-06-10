@@ -8,10 +8,15 @@ services:
       - "80:8051"  # Maps port 80 (HTTP) on the host to port 8051 in the container
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock  # Mounts the Docker socket for Docker-out-of-Docker sibling containers (GLUE)
-      - ./results:/app/results                      # Persists preprocessed metadata and alignments
-      - ./data:/app/data                            # Persists IHME and WHO epidemiological datasets
-      - ./jobs:/tmp/hep_dash_jobs                   # Persists user-submitted sequence analysis jobs
+      - results_data:/app/results                   # Persists preprocessed metadata and alignments
+      - data_data:/app/data                         # Persists IHME and WHO epidemiological datasets
+      - jobs_data:/tmp/hep_dash_jobs                # Persists user-submitted sequence analysis jobs
     environment:
       - HEP_JOBS_DIR=/tmp/hep_dash_jobs
       - HEP_PROJECT_ROOT=/app
     restart: always
+
+volumes:
+  results_data:
+  data_data:
+  jobs_data:
