@@ -1,0 +1,360 @@
+import yaml
+import glob
+import os
+
+configfile: "config.yaml"
+
+cfg = config["viruses"]
+VIRUSES = list(cfg.keys())
+
+# Define functions to get samples dynamically (they'll be called when needed)
+def get_hbv_samples():
+    """Get HBV samples from split_fasta directory"""
+    fasta_files = glob.glob("results/hbv/split_fasta/*.fasta")
+    return [os.path.splitext(os.path.basename(f))[0] for f in fasta_files]
+
+def get_hcv_samples():
+    """Get HCV samples from split_fasta directory"""
+    fasta_files = glob.glob("results/hcv/split_fasta/*.fasta")
+    return [os.path.splitext(os.path.basename(f))[0] for f in fasta_files]
+
+# Final outputs rule
+rule all:
+    input:
+        "results/hbv/final_resistance.tsv",
+        "results/hcv/final_resistance.tsv",
+        "results/hbv/aligned_clean.fasta.treefile",  # Change here to reflect cleaned treefile
+        "results/hcv/aligned_clean.fasta.treefile"   # Change here to reflect cleaned treefile
+
+###########################################
+# 1 — DOWNLOAD (NCBI)
+###########################################
+rule download_sequences:
+    output:
+        fasta="results/{virus}/{virus}_sequences.fasta",
+        meta="results/{virus}/{virus}_metadata.tsv"
+    params:
+        query=lambda w: cfg[w.virus]["ncbi_query"],
+        email=config["downloads"]["email"],
+        virus="{virus}",
+        minlength=lambda w: 2900 if w.virus == "HBV" else 8000,
+        maxlength=lambda w: 3500 if w.virus == "HBV" else 11000
+    conda: "envs/python.yaml"
+    script:
+        "scripts/download_sequences.py"
+
+###########################################
+# 2 — ALIGNMENT (MAFFT)
+###########################################
+rule align_mafft:
+    input:
+        seqs="results/{virus}/{virus}_sequences.fasta",
+        refs=lambda w: cfg[w.virus]["refs"]
+    output:
+        "results/{virus}/aligned.fasta"
+    conda: "envs/mafft.yaml"
+    shell:
+        r"""
+        # Ensure reference headers are unique by prefixing with REF_<n>_
+        awk 'BEGIN{{i=0}}
+             /^>/ {{
+                 i++;
+                 gsub(/[^A-Za-z0-9_.-]/, "_", $0);
+                 sub(/^>/, ">REF_" i "_", $0);
+             }}
+             {{print}}' {input.refs} \
+          > results/{wildcards.virus}/refs_fixed.fasta
+
+        # Combine sequences and fixed references
+        cat {input.seqs} results/{wildcards.virus}/refs_fixed.fasta \
+          > results/{wildcards.virus}/combined.fasta
+
+        # Align
+        mafft --auto --anysymbol --reorder results/{wildcards.virus}/combined.fasta \
+          > {output}
+        """
+
+###########################################
+# 3 — RECOMBINATION (RDP5CL)
+###########################################
+# rule rdp5:
+#     input:
+#         aln="results/{virus}/aligned.fasta"
+#     output:
+#         csv="results/{virus}/aligned.fasta.csv"
+#     params:
+#         exe=config["rdp5"]["exe"]
+#     shell:
+#         """
+#         cd results/{wildcards.virus}
+#         wine "{params.exe}" -f aligned.fasta -am
+#         mv aligned.fasta.csv ../../results/{wildcards.virus}/aligned.fasta.csv
+#         """
+# 
+# rule annotate_recombinants:
+#     input:
+#         meta="results/{virus}/{virus}_metadata.tsv",
+#         rdp="results/{virus}/aligned.fasta.csv"
+#     output:
+#         "results/{virus}/metadata_with_recomb.tsv"
+#     conda: "envs/python.yaml"
+#     script:
+#         "scripts/parse_rdp5.py"
+
+###########################################
+# 4 — PHYLOGENETICS (FastTree)
+###########################################
+rule clean_and_fasttree:
+    input:
+        "results/{virus}/aligned.fasta"
+    output:
+        "results/{virus}/aligned_clean.fasta.treefile"
+    conda: "envs/fasttree.yaml"
+    shell:
+        """
+        # Step 1: Clean the alignment by replacing ambiguous characters with N
+        sed 's/[bdhkmnrsvwyBHKMNRSVWY]/N/g' {input} > {input}.cleaned
+        
+        # Step 2: Run FastTree on the cleaned alignment
+        FastTree -nt {input}.cleaned > {output}
+        """
+# Annotate genotypes using reference sequences
+rule annotate_genotypes:
+    input:
+        tree="results/{virus}/aligned_clean.fasta.treefile",
+        metadata="results/{virus}_metadata.tsv"
+    output:
+        annotated="results/{virus}_annotated.tree",
+        genotypes="results/{virus}_genotypes.csv"
+    script:
+        "scripts/annotate_genotypes.py"
+###########################################
+# Split fasta for GLUE
+###########################################
+rule split_fasta_per_sequence:
+    input:
+        "results/{virus}/{virus}_sequences.fasta"
+    output:
+        directory("results/{virus}/split_fasta")
+    conda: "envs/python.yaml"
+    shell:
+        r"""
+        mkdir -p {output}
+        awk '
+          /^>/ {{
+            if (out) close(out);
+            name = substr($1, 2);
+            out = "{output}/" name ".fasta"
+          }}
+          {{ print > out }}
+        ' {input}
+        """
+
+###########################################
+# 5 — HBV GLUE Mutation Analysis
+###########################################
+rule hbv_glue:
+    input:
+        "results/hbv/split_fasta/{sample}.fasta"
+    output:
+        "results/hbv/glue/{sample}.xml"
+    resources:
+        gluemysql=1
+    params:
+        retries=3,
+        sleep_time=10,
+        timeout_sec=300
+    shell:
+        r"""
+        set -euo pipefail
+
+        SAMPLE="{wildcards.sample}"
+        MAX_RETRIES={params.retries}
+        SLEEP_TIME={params.sleep_time}
+        TIMEOUT={params.timeout_sec}
+
+        RETRY_COUNT=0
+        CURRENT_DIR=$(pwd)
+
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+
+            echo "=== Processing $SAMPLE (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES) ==="
+
+            GLUE_CMD="/tmp/glue_cmd_${SAMPLE}.glue"
+
+            cat > "$GLUE_CMD" << EOF
+project hbv
+console set log-level INFO
+console set next-cmd-output-file /work/result.xml
+module hdrReportingController invoke-function reportFastaCli /work/split_fasta/${SAMPLE}.fasta
+EOF
+
+            set +e
+            timeout "$TIMEOUT" singularity run \
+              --bind "$CURRENT_DIR/results/hbv:/work" \
+              --bind "$GLUE_CMD:/tmp/glue_cmd.glue" \
+              docker://cvrbioinformatics/gluetools:latest \
+              gluetools.sh -f /tmp/glue_cmd.glue -n
+            EXIT_CODE=$?
+            set -e
+
+            if [ "$EXIT_CODE" -eq 124 ]; then
+                echo "⚠️  Timeout after ${TIMEOUT}s for $SAMPLE"
+            fi
+
+            if [ -f "results/hbv/result.xml" ]; then
+                mv results/hbv/result.xml "{output}"
+                rm -f "$GLUE_CMD"
+                echo "✅ Success: {output}"
+                exit 0
+            fi
+
+            echo "❌ Attempt $((RETRY_COUNT+1)) failed for $SAMPLE"
+            rm -f results/hbv/result.xml "$GLUE_CMD"
+
+            RETRY_COUNT=$((RETRY_COUNT+1))
+
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "⏳ Retrying in $SLEEP_TIME seconds..."
+                sleep "$SLEEP_TIME"
+            fi
+
+        done
+
+        echo "🚨 ERROR: All $MAX_RETRIES attempts failed for $SAMPLE"
+        exit 1
+        """
+
+###########################################
+# 6 — HCV GLUE Mutation Analysis
+###########################################
+rule hcv_glue:
+    input:
+        "results/hcv/split_fasta/{sample}.fasta"
+    output:
+        "results/hcv/glue/{sample}.xml"
+    resources:
+        gluemysql=1
+    params:
+        retries=3,
+        sleep_time=10,
+        timeout_sec=300
+    shell:
+        r"""
+        set -euo pipefail
+
+        SAMPLE="{wildcards.sample}"
+        MAX_RETRIES={params.retries}
+        SLEEP_TIME={params.sleep_time}
+        TIMEOUT={params.timeout_sec}
+
+        RETRY_COUNT=0
+        CURRENT_DIR=$(pwd)
+
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+
+            echo "=== Processing HCV sample $SAMPLE (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES) ==="
+
+            GLUE_CMD="/tmp/glue_cmd_hcv_${SAMPLE}.glue"
+
+            cat > "$GLUE_CMD" << EOF
+project hcv
+console set log-level INFO
+console set next-cmd-output-file /work/result.xml
+module phdrReportingController invoke-function reportFasta /work/split_fasta/${SAMPLE}.fasta
+EOF
+
+            set +e
+            timeout "$TIMEOUT" docker run --rm \
+              --platform linux/amd64 \
+              --link gluetools-mysql-hcv:gluetools-mysql \
+              -v "$CURRENT_DIR/results/hcv:/work" \
+              -v "$GLUE_CMD:/tmp/glue_cmd.glue" \
+              cvrbioinformatics/gluetools:latest \
+              gluetools.sh -f /tmp/glue_cmd.glue -n
+            EXIT_CODE=$?
+            set -e
+
+            if [ "$EXIT_CODE" -eq 124 ]; then
+                echo "⚠️  Timeout after ${TIMEOUT}s for HCV sample $SAMPLE"
+            fi
+
+            if [ -f "results/hcv/result.xml" ]; then
+                mv results/hcv/result.xml "{output}"
+                rm -f "$GLUE_CMD"
+                echo "✅ Success: {output}"
+                exit 0
+            fi
+
+            echo "❌ Attempt $((RETRY_COUNT+1)) failed for HCV sample $SAMPLE"
+            rm -f results/hcv/result.xml "$GLUE_CMD"
+
+            RETRY_COUNT=$((RETRY_COUNT+1))
+
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "⏳ Retrying in $SLEEP_TIME seconds..."
+                sleep "$SLEEP_TIME"
+            fi
+
+        done
+
+        echo "🚨 ERROR: All $MAX_RETRIES attempts failed for HCV sample $SAMPLE"
+        exit 1
+        """
+
+###########################################
+# Generate mutation tsv
+###########################################
+rule parse_glue_xml:
+    input:
+        xml="results/{virus}/glue/{sample}.xml"
+    output:
+        tsv="results/{virus}/resistance/{sample}.tsv"
+    conda:
+        "envs/python.yaml"
+    shell:
+        """
+        mkdir -p results/{wildcards.virus}/resistance
+        if [ "{wildcards.virus}" = "hbv" ]; then
+            python scripts/parse_hbv_glue_xml.py {input.xml} {output.tsv}
+        else
+            python scripts/parse_hcv_glue_xml.py {input.xml} {output.tsv}
+        fi
+        """
+        
+rule merge_resistance_tables:
+    input:
+        lambda w: expand(
+            "results/{virus}/resistance/{sample}.tsv",
+            virus=w.virus,
+            sample=(
+                get_hbv_samples() if w.virus == "hbv" else get_hcv_samples()
+            )
+        )
+    output:
+        "results/{virus}/final_resistance.tsv"
+    shell:
+        """
+        # Check if we have any input files
+        if [ ! -d "results/{wildcards.virus}/resistance" ] || [ -z "$(ls -A results/{wildcards.virus}/resistance/*.tsv 2>/dev/null)" ]; then
+            echo "No resistance data available" > {output}
+            exit 0
+        fi
+        
+        # Merge files
+        head -n 1 $(ls results/{wildcards.virus}/resistance/*.tsv | head -1) > {output}
+        tail -n +2 -q results/{wildcards.virus}/resistance/*.tsv >> {output}
+        """
+
+###########################################
+# 7 — FINAL MERGE
+###########################################
+rule merge_everything:
+    input:
+        tree="results/{virus}/aligned.fasta.treefile",
+        recomb="results/{virus}/metadata_with_recomb.tsv",
+    output:
+        "results/{virus}/final_report.tsv"
+    conda: "envs/python.yaml"
+    script:
+        "scripts/merge_everything.py"

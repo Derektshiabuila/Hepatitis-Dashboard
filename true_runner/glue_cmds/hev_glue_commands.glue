@@ -1,0 +1,19 @@
+# Enter the HEV project
+project hev
+
+  # Suppress logging for cleaner output
+  console set log-level OFF
+
+  # Write the next command result to an XML file
+  console set next-cmd-output-file /work/result.xml
+
+  # Run genotyping analysis on a FASTA file
+  module hevMaxLikelihoodGenotyper invoke-function genotype file -f /work/split_fasta/{{sample}}.fasta
+
+exit
+
+# Exit GLUE
+exit
+
+--platform linux/amd64
+

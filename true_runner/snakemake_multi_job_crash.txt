@@ -1,0 +1,194 @@
+import yaml
+import glob
+import os
+
+configfile: "config.yaml"
+
+cfg = config["viruses"]
+VIRUSES = list(cfg.keys())
+
+# Define functions to get samples dynamically (they'll be called when needed)
+def get_samples(virus):
+    fasta_files = glob.glob(f"results/{virus}/split_fasta/*.fasta")
+    return [os.path.splitext(os.path.basename(f))[0] for f in fasta_files]
+
+def samples_from_checkpoint(wildcards):
+    ckpt = checkpoints.split_fasta_per_sequence.get(virus=wildcards.virus)
+    fasta_dir = ckpt.output[0]
+    return glob_wildcards(f"{fasta_dir}/{{sample}}.fasta").sample
+
+# Final outputs rule
+rule all:
+    input:
+        expand("results/{virus}/final_resistance.tsv",
+               virus=["hbv", "hcv", "hev"])
+
+###########################################
+# 1 — DOWNLOAD (NCBI)
+###########################################
+rule download_sequences:
+    output:
+        fasta="results/{virus}/{virus}_sequences.fasta",
+        meta="results/{virus}/{virus}_metadata.tsv"
+    params:
+        query=lambda w: cfg[w.virus]["ncbi_query"],
+        email=config["downloads"]["email"],
+        virus="{virus}",
+        minlength=lambda w: 2900 if w.virus == "hbv" else 8000,
+        maxlength=lambda w: 3500 if w.virus == "hbv" else 11000
+    conda: "envs/python.yaml"
+    script:
+        "scripts/download_sequences.py"
+
+###########################################
+# Split fasta for GLUE
+###########################################
+checkpoint split_fasta_per_sequence:
+    input:
+        "results/{virus}/{virus}_sequences.fasta"
+    output:
+        directory("results/{virus}/split_fasta")
+    conda: "envs/python.yaml"
+    shell:
+        r"""
+        mkdir -p {output}
+        awk '
+          /^>/ {{
+            if (out) close(out);
+            name = substr($1, 2);
+            out = "{output}/" name ".fasta"
+          }}
+          {{ print > out }}
+        ' {input}
+        """
+
+###########################################
+# 5 — HBV GLUE Mutation Analysis
+###########################################
+rule glue_analysis:
+    input:
+        fasta="results/{virus}/split_fasta/{sample}.fasta"
+    output:
+        xml="results/{virus}/glue/{sample}.xml"
+    resources:
+        gluemysql=lambda w: 1 if w.virus == "hbv" else 0
+    params:
+        project=lambda w: w.virus,
+        glue_module=lambda w:
+            "hdrReportingController invoke-function reportFastaCli"
+            if w.virus == "hbv"
+            else "phdrReportingController invoke-function reportFasta"
+            if w.virus == "hcv"
+            else "hevMaxLikelihoodGenotyper invoke-function genotype file",
+        retries=1,
+        sleep_time=10
+    shell:
+        r"""
+        mkdir -p results/{wildcards.virus}/glue
+        SAMPLE="{wildcards.sample}"
+        
+        MAX_RETRIES={params.retries}
+        SLEEP_TIME={params.sleep_time}
+        RETRY_COUNT=0
+        
+        # 🔥 IMPORTANT: reset MySQL before GLUE connects
+        for i in {{1..30}}; do
+            docker exec gluetools-mysql-{wildcards.virus} \
+                mysqladmin ping -h localhost --silent && break
+            sleep 1
+        done
+        
+	while [ $RETRY_COUNT -le $MAX_RETRIES ]; do
+	cat > /tmp/glue_cmd_$SAMPLE.glue << EOF
+project {params.project}
+console set log-level INFO
+console set next-cmd-output-file /work/result.xml
+module {params.glue_module} /work/split_fasta/$SAMPLE.fasta
+EOF
+        
+            timeout --signal=SIGKILL 600s docker run --rm \
+              --platform linux/amd64 \
+              --link gluetools-mysql-{wildcards.virus}:gluetools-mysql \
+              -v $(pwd)/results/{wildcards.virus}:/work \
+              -v /tmp/glue_cmd_$SAMPLE.glue:/tmp/glue_cmd.glue \
+              cvrbioinformatics/gluetools:latest \
+              gluetools.sh -f /tmp/glue_cmd.glue -n || true
+        
+            if [ -f "results/{wildcards.virus}/result.xml" ]; then
+                mv results/{wildcards.virus}/result.xml {output.xml}
+                exit 0
+            fi
+        
+            RETRY_COUNT=$((RETRY_COUNT+1))
+            sleep $SLEEP_TIME
+        done
+
+
+VIRUS="{wildcards.virus}"
+
+echo "GLUE failed for $SAMPLE — writing empty XML" >&2
+
+cat > {output.xml} << EOF
+<glueFailure>
+  <sample>$SAMPLE</sample>
+  <virus>$VIRUS</virus>
+  <reason>hdrReportingController null input</reason>
+</glueFailure>
+EOF
+
+exit 0
+        """
+###########################################
+# Generate mutation tsv
+###########################################
+rule parse_glue_xml:
+    input:
+        xml="results/{virus}/glue/{sample}.xml"
+    output:
+        tsv="results/{virus}/resistance/{sample}.tsv"
+    conda: "envs/python.yaml"
+    shell:
+        r"""
+        mkdir -p results/{wildcards.virus}/resistance
+
+        if [ "{wildcards.virus}" = "hbv" ]; then
+            python scripts/parse_hbv_glue_xml.py {input.xml} {output.tsv}
+        elif [ "{wildcards.virus}" = "hcv" ]; then
+            python scripts/parse_hcv_glue_xml.py {input.xml} {output.tsv}
+        else
+            python scripts/parse_hev_glue_xml.py {input.xml} {output.tsv}
+        fi
+
+        python scripts/validate_schema.py {output.tsv}
+        """
+
+############################################
+# Merge tables
+############################################        
+rule merge_resistance_tables:
+    input:
+        lambda w: expand(
+            "results/{virus}/resistance/{sample}.tsv",
+            virus=w.virus,
+            sample=samples_from_checkpoint(w)
+        )
+    output:
+        "results/{virus}/final_resistance.tsv"
+    shell:
+        r"""
+        head -n 1 {input[0]} > {output}
+        tail -n +2 -q {input} >> {output}
+        """
+
+###########################################
+# 7 — FINAL MERGE
+###########################################
+rule merge_everything:
+    input:
+        tree="results/{virus}/aligned.fasta.treefile",
+        recomb="results/{virus}/metadata_with_recomb.tsv",
+    output:
+        "results/{virus}/final_report.tsv"
+    conda: "envs/python.yaml"
+    script:
+        "scripts/merge_everything.py"

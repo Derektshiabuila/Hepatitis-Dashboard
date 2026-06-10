@@ -1,0 +1,6 @@
+  project hcv
+    console set log-level INFO 
+    console set next-cmd-output-file /work/result.xml
+    module phdrReportingController invoke-function reportFasta /work/split_fasta/{{sample}}.fasta
+  exit
+  exit
