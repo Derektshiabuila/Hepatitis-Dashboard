@@ -128,6 +128,114 @@ rule glue_analysis:
             sleep 1
         done
         
+        cat > /tmp/gluetools-config_$SAMPLE.xml << EOF
+<gluetools>
+	<database>
+		<username>gluetools</username>
+		<password>glue12345</password>
+		<jdbcUrl>jdbc:mysql://gluetools-mysql:3306/GLUE_TOOLS?characterEncoding=UTF-8&amp;useSSL=false&amp;allowPublicKeyRetrieval=true</jdbcUrl>
+	</database>
+	<properties>
+		<!-- BLAST related config -->
+	    <property>
+			<name>gluetools.core.programs.blast.blastn.executable</name>
+			<value>/opt/gluetools/blast/ncbi-blast-2.2.31+/bin/blastn</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.blast.tblastn.executable</name>
+			<value>/opt/gluetools/blast/ncbi-blast-2.2.31+/bin/tblastn</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.blast.makeblastdb.executable</name>
+			<value>/opt/gluetools/blast/ncbi-blast-2.2.31+/bin/makeblastdb</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.blast.search.threads</name>
+			<value>4</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.blast.temp.dir</name>
+			<value>/opt/gluetools/tmp/blastfiles</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.blast.db.dir</name>
+			<value>/opt/gluetools/tmp/blastdbs</value>
+		</property>
+		<!-- RAxML-specific config -->
+		<property>
+			<name>gluetools.core.programs.raxml.raxmlhpc.executable</name>
+			<value>/opt/gluetools/raxml/bin/raxmlHPC-PTHREADS-SSE3</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.raxml.raxmlhpc.cpus</name>
+			<value>4</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.raxml.temp.dir</name>
+			<value>/opt/gluetools/tmp/raxmlfiles</value>
+		</property>
+		<!-- MAFFT-specific config -->
+		<property>
+			<name>gluetools.core.programs.mafft.executable</name>
+			<value>/usr/local/bin/mafft</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.mafft.cpus</name>
+			<value>4</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.mafft.temp.dir</name>
+			<value>/opt/gluetools/tmp/mafftfiles</value>
+		</property>
+		<!-- JModelTest -->
+		<property>
+			<name>gluetools.core.programs.jmodeltester.jar</name>
+			<value>/opt/gluetools/jModelTest/lib/jModelTest.jar</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.jmodeltester.temp.dir</name>
+			<value>/opt/gluetools/tmp/jmodeltest</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.jmodeltester.cpus</name>
+			<value>4</value>
+		</property>
+		<!-- tbl2asn-->
+		<property>
+			<name>gluetools.core.programs.tbl2asn.executable</name>
+			<value>/opt/gluetools/tbl2asn/bin/tbl2asn</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.tbl2asn.temp.dir</name>
+			<value>/opt/gluetools/tmp/tbl2asn</value>
+		</property>
+		<!-- ClusterPicker -->
+		<property>
+			<name>gluetools.core.programs.clusterPicker.jarPath</name>
+			<value>/opt/gluetools/clusterPicker/lib/ClusterPicker_1.2.5.jar</value>
+		</property>
+		<property>
+			<name>gluetools.core.programs.clusterPicker.temp.dir</name>
+			<value>/opt/gluetools/tmp/clusterPicker</value>
+		</property>
+		<!-- SAM/BAM file processing -->
+		<property>
+			<name>gluetools.core.sam.temp.dir</name>
+			<value>/opt/gluetools/tmp/sam</value>
+		</property>
+		<property>
+			<name>gluetools.core.sam.cpus</name>
+			<value>4</value>
+		</property>
+		<!-- Cayenne -->
+		<property>
+			<name>cayenne.querycache.size</name>
+			<value>30000</value>
+		</property>
+	</properties>
+</gluetools>
+EOF
+
         while [ $RETRY_COUNT -le $MAX_RETRIES ]; do
         cat > /tmp/glue_cmd_$SAMPLE.glue << EOF
 project {params.project}
@@ -144,17 +252,20 @@ EOF
               -e OPENBLAS_NUM_THREADS=1 \
               -v $(realpath results/{wildcards.virus}):/work \
               -v /tmp/glue_cmd_$SAMPLE.glue:/tmp/glue_cmd.glue \
+              -v /tmp/gluetools-config_$SAMPLE.xml:/opt/gluetools/conf/gluetools-config.xml \
               cvrbioinformatics/gluetools:latest \
               gluetools.sh -f /tmp/glue_cmd.glue -n || true
         
             if [ -f "results/{wildcards.virus}/result.xml" ]; then
                 mv results/{wildcards.virus}/result.xml {output.xml}
+                rm -f /tmp/gluetools-config_$SAMPLE.xml
                 exit 0
             fi
         
             RETRY_COUNT=$((RETRY_COUNT+1))
             sleep $SLEEP_TIME
         done
+        rm -f /tmp/gluetools-config_$SAMPLE.xml
 
         VIRUS="{wildcards.virus}"
         echo "GLUE failed for $SAMPLE — writing empty XML" >&2
