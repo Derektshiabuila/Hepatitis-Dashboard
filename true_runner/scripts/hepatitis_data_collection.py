@@ -129,13 +129,44 @@ def fetch_sequences_batch(accession_list: List[str], batch_size=200, output_file
 # Download metadata from NCBI Datasets API
 ###########################################################
 
-def fetch_virus_metadata(payload: VirusRequestPayload) -> VirusMetadataResponse:
-    response = api.post(
-        f"{ncbi_api_url}/virus",
-        json=payload.model_dump(exclude_none=True)
-    ).json()
-
-    return VirusMetadataResponse(**response)
+def fetch_virus_metadata(payload: VirusRequestPayload, max_retries=5, backoff_factor=2) -> VirusMetadataResponse:
+    url = f"{ncbi_api_url}/virus"
+    data = payload.model_dump(exclude_none=True)
+    
+    for attempt in range(max_retries):
+        try:
+            response = api.post(url, json=data)
+            
+            # Handle rate limiting (429) and temporary server issues (5xx)
+            if response.status_code == 429 or response.status_code >= 500:
+                sleep_time = (backoff_factor ** attempt) + 1
+                status_desc = "Rate limited (429)" if response.status_code == 429 else f"Server error ({response.status_code})"
+                print(f"[WARNING] {status_desc} from NCBI. Retrying in {sleep_time}s (attempt {attempt + 1}/{max_retries})...")
+                time.sleep(sleep_time)
+                continue
+                
+            response.raise_for_status()
+            
+            try:
+                response_json = response.json()
+                return VirusMetadataResponse(**response_json)
+            except Exception as e:
+                # If decoding failed, it might have been an HTML error response under status code 200
+                print(f"[ERROR] Failed to parse JSON from NCBI response. Status: {response.status_code}. Text: {response.text[:500]}")
+                if attempt < max_retries - 1:
+                    sleep_time = (backoff_factor ** attempt) + 1
+                    print(f"Retrying in {sleep_time}s...")
+                    time.sleep(sleep_time)
+                    continue
+                raise e
+                
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"[FATAL] NCBI datasets request failed after {max_retries} attempts.")
+                raise e
+            sleep_time = (backoff_factor ** attempt) + 1
+            print(f"[WARNING] Request failed: {e}. Retrying in {sleep_time}s (attempt {attempt + 1}/{max_retries})...")
+            time.sleep(sleep_time)
 
 def fetch_all_virus_metadata(filters: VirusFilter, page_size=1000):
     reports = []
@@ -158,7 +189,8 @@ def fetch_all_virus_metadata(filters: VirusFilter, page_size=1000):
             break
 
         token = response.next_page_token
-        time.sleep(0.1)
+        # Sleep for 0.35s to respect NCBI API rate limit of 5 requests per second
+        time.sleep(0.35)
 
     return reports
 
