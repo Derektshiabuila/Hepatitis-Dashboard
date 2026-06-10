@@ -37,7 +37,11 @@ WORKDIR /app
 
 # Copy the environment file and create the phylo Conda environment
 COPY envs/phylo.yaml /app/envs/phylo.yaml
-RUN conda env create -f /app/envs/phylo.yaml && conda clean -afy
+RUN conda config --remove channels defaults || true && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main || true && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r || true && \
+    conda env create -f /app/envs/phylo.yaml && \
+    conda clean -afy
 
 # Set path to use the conda environment binaries by default
 ENV PATH=/opt/conda/envs/phylo/bin:$PATH

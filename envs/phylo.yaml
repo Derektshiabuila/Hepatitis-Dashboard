@@ -1,0 +1,11 @@
+name: phylo
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - epa-ng=0.3.8
+  - iqtree=2.2.6
+  - mafft=7.520
+  - seqkit=2.8.0
+  - raxml=8.2.12
+  - python>=3.10

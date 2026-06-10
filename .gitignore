@@ -8,10 +8,10 @@ __pycache__/
 Thumbs.db
 
 # Virtual environments
-envs/
 .venv/
 venv/
 env/
+envs/*/
 
 # Snakemake internal
 .snakemake/

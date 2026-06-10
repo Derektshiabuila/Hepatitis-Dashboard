@@ -1,0 +1,5 @@
+name: iqtree_env
+channels:
+  - bioconda
+dependencies:
+  - iqtree=2.*
