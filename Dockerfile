@@ -54,7 +54,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Initialize Wine in headless mode
 ENV WINEPREFIX=/root/.wine
 ENV WINEDEBUG=-all
-RUN xvfb-run winecfg
+ENV WINEDLLOVERRIDES="mscoree,mshtml=d"
+RUN wineboot --init
 
 # Attempt to download and silent-install RDP5 inside Wine
 # Falls back gracefully to the pre-loaded scripts/RDP5CL.exe if UCT servers are unreachable
