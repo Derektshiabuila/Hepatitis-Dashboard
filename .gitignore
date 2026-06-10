@@ -1,0 +1,43 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+envs/
+.venv/
+venv/
+env/
+
+# Snakemake internal
+.snakemake/
+
+# Temp and job outputs
+temp/
+tmp/
+.pytest_cache/
+
+# Large preprocessed results and alignments
+results/**/*.fasta
+results/**/*.tsv
+results/**/*.csv
+results/**/*.xml
+results/**/*.log
+results/**/*.bionj
+results/**/*.iqtree
+results/**/*.ckp.gz
+results/**/*.mldist
+results/**/*.treefile
+results/**/*.splits.nex
+results/**/*.splits
+results/**/*.contree
+results/**/split_fasta/
+results/**/resistance/
+results/**/glue/
+
+# Large raw dataset
+data/IHME-GBD_2021_DATA-9e7ec2c0-1.csv

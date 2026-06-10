@@ -1,0 +1,23 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <script type="application/javascript" src="https://unpkg.com/phylocanvas@2.8.1/dist/phylocanvas.js"></script>
+</head>
+<body style="margin:0; padding:0; overflow:hidden;">
+    <div id="phylocanvas" style="width: 100vw; height: 100vh;"></div>
+    <script type="application/javascript">
+        window.onload = function() {
+            try {
+                var tree = Phylocanvas.createTree('phylocanvas');
+                tree.load(`(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);`);
+                tree.setTreeType('rectangular');
+                tree.alignLabels = true;
+                tree.draw();
+            } catch (e) {
+                document.body.innerHTML = 'Error: ' + e.message;
+            }
+        };
+    </script>
+</body>
+</html>

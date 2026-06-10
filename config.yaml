@@ -1,0 +1,19 @@
+viruses:
+  hbv:
+    refs: "refs/HBV_refs.fasta"
+    ncbi_query: "Hepatitis B virus[organism] AND complete genome"
+
+  hcv:
+    refs: "refs/HCV_refs.fasta"
+    ncbi_query: "Hepatitis C virus[organism] AND complete genome"
+
+  hev:
+    refs: "refs/HEV_refs.fasta"
+    ncbi_query: "Hepatitis E virus[organism] AND complete genome"
+
+downloads:
+  email: "derektshiabuila@gmail.com"
+
+rdp5:
+  exe: "/Users/derektshiabuila/Library/PlayOnMac/wineprefix/RDP5.78_/drive_c/Program\ Files/RDP5/RDP5CL.exe"
+

@@ -1,0 +1,155 @@
+IMPORTANT WARNING: Alignment column 2467 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2468 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2469 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2470 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2471 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2472 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2473 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2474 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2475 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2476 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2477 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2478 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2479 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2480 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2481 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2482 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2483 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2484 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2485 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2486 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2487 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2488 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2489 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2490 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2491 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2492 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2493 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2494 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2495 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2496 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2497 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2498 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2499 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2500 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2501 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2502 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2503 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2504 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2505 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2506 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2507 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2508 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2509 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2510 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2511 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2512 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2513 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2514 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2515 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2516 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2517 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2518 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2519 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2520 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2521 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2522 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2523 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2524 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2525 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2526 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2527 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2528 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2529 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2530 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2531 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2532 contains only undetermined values which will be treated as missing data
+IMPORTANT WARNING: Alignment column 2533 contains only undetermined values which will be treated as missing data
+
+IMPORTANT WARNING
+Found 67 columns that contain only undetermined values which will be treated as missing data.
+Normally these columns should be excluded from the analysis.
+
+Just in case you might need it, an alignment file with 
+undetermined columns removed is printed to file refs/hev/ref_msa.fasta.reduced
+
+
+Using BFGS method to optimize GTR rate parameters, to disable this specify "--no-bfgs" 
+
+
+Alignment has 67 completely undetermined sites that will be automatically removed from the input data
+
+
+
+This is RAxML version 8.2.12 released by Alexandros Stamatakis on May 2018.
+
+With greatly appreciated code contributions by:
+Andre Aberer      (HITS)
+Simon Berger      (HITS)
+Alexey Kozlov     (HITS)
+Kassian Kobert    (HITS)
+David Dao         (KIT and HITS)
+Sarah Lutteropp   (KIT and HITS)
+Nick Pattengale   (Sandia)
+Wayne Pfeiffer    (SDSC)
+Akifumi S. Tanabe (NRIFS)
+Charlie Taylor    (UF)
+
+
+Alignment has 3699 distinct alignment patterns
+
+Proportion of gaps and completely undetermined characters in this alignment: 4.39%
+
+RAxML Model Optimization up to an accuracy of 0.100000 log likelihood units
+
+Using 1 distinct models/data partitions with joint branch length optimization
+
+
+All free model parameters will be estimated by RAxML
+GAMMA model of rate heterogeneity, ML estimate of alpha-parameter
+
+GAMMA Model parameters will be estimated up to an accuracy of 0.1000000000 Log Likelihood units
+
+Partition: 0
+Alignment Patterns: 3699
+Name: No Name Provided
+DataType: DNA
+Substitution Matrix: GTR
+Base frequencies: ML estimate
+
+
+
+
+RAxML was called as follows:
+
+raxmlHPC -f e -s refs/hev/ref_msa.fasta -t refs/hev/ref_tree.treefile -n hev_ref -m GTRGAMMAX -w /Users/derektshiabuila/Documents/Hepatitis_Dash_2026_Auto_analysis/refs/hev/ 
+
+
+
+Model parameters (binary file format) written to: /Users/derektshiabuila/Documents/Hepatitis_Dash_2026_Auto_analysis/refs/hev/RAxML_binaryModelParameters.hev_ref
+
+
+Overall Time for Tree Evaluation 6.778729
+Final GAMMA  likelihood: -117201.904516
+
+Number of free parameters for AIC-TEST(BR-LEN): 90
+Number of free parameters for AIC-TEST(NO-BR-LEN): 9
+
+
+Model Parameters of Partition 0, Name: No Name Provided, Type of Data: DNA
+alpha: 0.220302
+Tree-Length: 7.829637
+rate A <-> C: 2.457377
+rate A <-> G: 17.112495
+rate A <-> T: 3.404654
+rate C <-> G: 0.994107
+rate C <-> T: 19.124116
+rate G <-> T: 1.000000
+
+freq pi(A): 0.148195
+freq pi(C): 0.300505
+freq pi(G): 0.264620
+freq pi(T): 0.286679
+
+Final tree written to:                 /Users/derektshiabuila/Documents/Hepatitis_Dash_2026_Auto_analysis/refs/hev/RAxML_result.hev_ref
+Execution Log File written to:         /Users/derektshiabuila/Documents/Hepatitis_Dash_2026_Auto_analysis/refs/hev/RAxML_log.hev_ref
