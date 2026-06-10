@@ -1,0 +1,78 @@
+
+
+Using BFGS method to optimize GTR rate parameters, to disable this specify "--no-bfgs" 
+
+
+
+This is RAxML version 8.2.12 released by Alexandros Stamatakis on May 2018.
+
+With greatly appreciated code contributions by:
+Andre Aberer      (HITS)
+Simon Berger      (HITS)
+Alexey Kozlov     (HITS)
+Kassian Kobert    (HITS)
+David Dao         (KIT and HITS)
+Sarah Lutteropp   (KIT and HITS)
+Nick Pattengale   (Sandia)
+Wayne Pfeiffer    (SDSC)
+Akifumi S. Tanabe (NRIFS)
+Charlie Taylor    (UF)
+
+
+Alignment has 1067 distinct alignment patterns
+
+Proportion of gaps and completely undetermined characters in this alignment: 1.44%
+
+RAxML Model Optimization up to an accuracy of 0.100000 log likelihood units
+
+Using 1 distinct models/data partitions with joint branch length optimization
+
+
+All free model parameters will be estimated by RAxML
+GAMMA model of rate heterogeneity, ML estimate of alpha-parameter
+
+GAMMA Model parameters will be estimated up to an accuracy of 0.1000000000 Log Likelihood units
+
+Partition: 0
+Alignment Patterns: 1067
+Name: No Name Provided
+DataType: DNA
+Substitution Matrix: GTR
+Base frequencies: ML estimate
+
+
+
+
+RAxML was called as follows:
+
+raxmlHPC -f e -s refs/hbv/ref_msa.fasta -t refs/hbv/ref_tree.treefile -n hbv_ref -m GTRGAMMAX -w /Users/derektshiabuila/Documents/Hepatitis_Dash_2026_Auto_analysis/refs/hbv/ 
+
+
+
+Model parameters (binary file format) written to: /Users/derektshiabuila/Documents/Hepatitis_Dash_2026_Auto_analysis/refs/hbv/RAxML_binaryModelParameters.hbv_ref
+
+
+Overall Time for Tree Evaluation 1.627491
+Final GAMMA  likelihood: -24738.698520
+
+Number of free parameters for AIC-TEST(BR-LEN): 94
+Number of free parameters for AIC-TEST(NO-BR-LEN): 9
+
+
+Model Parameters of Partition 0, Name: No Name Provided, Type of Data: DNA
+alpha: 0.227485
+Tree-Length: 1.713671
+rate A <-> C: 2.270915
+rate A <-> G: 4.940695
+rate A <-> T: 1.375959
+rate C <-> G: 0.557106
+rate C <-> T: 4.565448
+rate G <-> T: 1.000000
+
+freq pi(A): 0.239067
+freq pi(C): 0.263220
+freq pi(G): 0.210563
+freq pi(T): 0.287150
+
+Final tree written to:                 /Users/derektshiabuila/Documents/Hepatitis_Dash_2026_Auto_analysis/refs/hbv/RAxML_result.hbv_ref
+Execution Log File written to:         /Users/derektshiabuila/Documents/Hepatitis_Dash_2026_Auto_analysis/refs/hbv/RAxML_log.hbv_ref

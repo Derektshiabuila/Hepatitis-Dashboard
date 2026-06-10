@@ -1,0 +1,389 @@
+import yaml
+import glob
+import os
+
+configfile: "config.yaml"
+
+cfg = config["viruses"]
+VIRUSES = list(cfg.keys())
+
+# Define functions to get samples dynamically (they'll be called when needed)
+def get_samples(virus):
+    fasta_files = glob.glob(f"results/{virus}/split_fasta/*.fasta")
+    return [os.path.splitext(os.path.basename(f))[0] for f in fasta_files]
+
+def samples_from_checkpoint(wildcards):
+    ckpt = checkpoints.split_fasta_per_sequence.get(virus=wildcards.virus)
+    fasta_dir = ckpt.output[0]
+    return glob_wildcards(f"{fasta_dir}/{{sample}}.fasta").sample
+
+# Final outputs rule
+rule all:
+    input:
+        expand("results/{virus}/final_resistance.tsv",
+               virus=["hbv", "hcv", "hev"]),
+        expand("results/{virus}/genotype_alignments.done",
+               virus=["hbv", "hcv", "hev"])
+
+###########################################
+# 1 — DOWNLOAD (NCBI)
+###########################################
+rule download_sequences:
+    output:
+        fasta="results/{virus}/{virus}_sequences.fasta",
+        meta="results/{virus}/{virus}_metadata.tsv"
+    params:
+        query=lambda w: cfg[w.virus]["ncbi_query"],
+        email=config["downloads"]["email"],
+        virus="{virus}",
+        minlength=lambda w: 2900 if w.virus == "hbv" else 8000,
+        maxlength=lambda w: 3500 if w.virus == "hbv" else 11000
+    conda: "envs/python.yaml"
+    script:
+        "scripts/download_sequences.py"
+        
+###########################################
+# Population retriever
+###########################################
+rule retrieve_population:
+    output:
+        "data/population_by_country_year.csv"
+    conda: "envs/python.yaml"
+    script:
+        "scripts/population_retriever.py"
+
+###########################################
+# Split fasta for GLUE
+###########################################
+checkpoint split_fasta_per_sequence:
+    input:
+        "results/{virus}/{virus}_sequences.fasta"
+    output:
+        directory("results/{virus}/split_fasta")
+    conda: "envs/python.yaml"
+    shell:
+        r"""
+        mkdir -p {output}
+        awk '
+          /^>/ {{
+            if (out) close(out);
+            name = substr($1, 2);
+            out = "{output}/" name ".fasta"
+          }}
+          {{ print > out }}
+        ' {input}
+        """
+
+###########################################
+# 5 — HBV GLUE Mutation Analysis
+###########################################
+rule glue_analysis:
+    input:
+        fasta="results/{virus}/split_fasta/{sample}.fasta"
+    output:
+        xml="results/{virus}/glue/{sample}.xml"
+    threads: 4 # was working fine using 1. testing 2 to see if there is a crash
+    resources:
+        gluemysql=1
+    params:
+        project=lambda w: w.virus,
+        glue_module=lambda w:
+            "hdrReportingController invoke-function reportFastaCli"
+            if w.virus == "hbv"
+            else "phdrReportingController invoke-function reportFasta"
+            if w.virus == "hcv"
+            else "hevMaxLikelihoodGenotyper genotype file -f",
+        retries=1,
+        sleep_time=10
+    shell:
+        r"""
+        mkdir -p results/{wildcards.virus}/glue
+        SAMPLE="{wildcards.sample}"
+        
+        MAX_RETRIES={params.retries}
+        SLEEP_TIME={params.sleep_time}
+        RETRY_COUNT=0
+        
+        # 🔥 IMPORTANT: reset MySQL before GLUE connects
+        for i in {{1..30}}; do
+            docker exec gluetools-mysql-{wildcards.virus} \
+                mysqladmin ping -h localhost --silent && break
+            sleep 1
+        done
+        
+	while [ $RETRY_COUNT -le $MAX_RETRIES ]; do
+	cat > /tmp/glue_cmd_$SAMPLE.glue << EOF
+project {params.project}
+console set log-level INFO
+console set next-cmd-output-file /work/result.xml
+module {params.glue_module} /work/split_fasta/$SAMPLE.fasta
+EOF
+        
+			timeout --signal=SIGKILL 600s docker run --rm \
+			  --platform linux/amd64 \
+			  --link gluetools-mysql-{wildcards.virus}:gluetools-mysql \
+			  -e MAFFT_NTHREAD=1 \
+			  -e OMP_NUM_THREADS=1 \
+			  -e OPENBLAS_NUM_THREADS=1 \
+			  -v $(pwd)/results/{wildcards.virus}:/work \
+			  -v /tmp/glue_cmd_$SAMPLE.glue:/tmp/glue_cmd.glue \
+			  cvrbioinformatics/gluetools:latest \
+			  gluetools.sh -f /tmp/glue_cmd.glue -n || true
+        
+            if [ -f "results/{wildcards.virus}/result.xml" ]; then
+                mv results/{wildcards.virus}/result.xml {output.xml}
+                exit 0
+            fi
+        
+            RETRY_COUNT=$((RETRY_COUNT+1))
+            sleep $SLEEP_TIME
+        done
+
+
+VIRUS="{wildcards.virus}"
+
+echo "GLUE failed for $SAMPLE — writing empty XML" >&2
+
+cat > {output.xml} << EOF
+<glueFailure>
+  <sample>$SAMPLE</sample>
+  <virus>$VIRUS</virus>
+  <reason>hdrReportingController null input</reason>
+</glueFailure>
+EOF
+
+exit 0
+        """
+###########################################
+# Generate mutation tsv
+###########################################
+rule parse_glue_xml:
+    input:
+        xml="results/{virus}/glue/{sample}.xml"
+    output:
+        tsv="results/{virus}/resistance/{sample}.tsv"
+    conda: "envs/python.yaml"
+    shell:
+        r"""
+        mkdir -p results/{wildcards.virus}/resistance
+
+        if [ "{wildcards.virus}" = "hbv" ]; then
+            python scripts/parse_hbv_glue_xml.py {input.xml} {output.tsv}
+        elif [ "{wildcards.virus}" = "hcv" ]; then
+            python scripts/parse_hcv_glue_xml.py {input.xml} {output.tsv}
+        else
+            python scripts/parse_hev_glue_xml.py {input.xml} {output.tsv}
+        fi
+
+        python scripts/validate_schema.py {output.tsv}
+        """
+
+############################################
+# Merge tables
+############################################        
+rule merge_resistance_tables:
+    input:
+        lambda w: expand(
+            "results/{virus}/resistance/{sample}.tsv",
+            virus=w.virus,
+            sample=samples_from_checkpoint(w)
+        )
+    output:
+        "results/{virus}/final_resistance.tsv"
+    shell:
+        r"""
+        set -euo pipefail
+
+        # Find first non-empty TSV with a header
+        header_file=$(awk 'FNR==1 && NF>1 {{print FILENAME; exit}}' {input})
+
+        if [ -z "$header_file" ]; then
+            echo "[ERROR] No valid TSV files found for {wildcards.virus}" >&2
+            exit 1
+        fi
+
+        # Write header
+        head -n 1 "$header_file" > {output}
+
+        # Append all data rows
+        for f in {input}; do
+            if [ -s "$f" ]; then
+                tail -n +2 "$f" >> {output} || true
+            fi
+        done
+        """
+###########################################
+# 7 — FINAL MERGE
+###########################################
+rule merge_everything:
+    input:
+        tree="results/{virus}/aligned.fasta.treefile",
+        recomb="results/{virus}/metadata_with_recomb.tsv",
+    output:
+        "results/{virus}/final_report.tsv"
+    conda: "envs/python.yaml"
+    script:
+        "scripts/merge_everything.py"
+
+###########################################
+# Group sequences by genotype and align
+###########################################
+def get_genotype_groups(wildcards):
+    """Get list of genotypes from final_resistance.tsv for a given virus"""
+    # Delayed import - only when function is executed
+    import pandas as pd
+    import os
+    
+    resistance_file = f"results/{wildcards.virus}/final_resistance.tsv"
+    
+    if not os.path.exists(resistance_file):
+        return []
+    
+    try:
+        # Read resistance file
+        df = pd.read_csv(resistance_file, sep='\t')
+        
+        # Extract genotype column (adjust column name as needed)
+        genotype_col = None
+        for col in ['genotype', 'Genotype', 'GT', 'gt', 'genotype_assignment']:
+            if col in df.columns:
+                genotype_col = col
+                break
+        
+        if genotype_col is None:
+            print(f"Warning: No genotype column found in {resistance_file}")
+            return []
+        
+        # Get unique genotypes
+        genotypes = df[genotype_col].astype(str).str.strip().dropna().unique().tolist()
+        
+        # Filter valid genotypes
+        valid_genotypes = []
+        for g in genotypes:
+            g_str = str(g).strip()
+            if g_str and g_str.lower() not in ['nan', 'none', 'unknown', '']:
+                valid_genotypes.append(g_str)
+        
+        return valid_genotypes
+        
+    except Exception as e:
+        print(f"Error reading {resistance_file}: {e}")
+        return []
+
+# Rule to extract genotype groups and align
+rule genotype_alignment:
+    input:
+        resistance="results/{virus}/final_resistance.tsv",
+        sequences="results/{virus}/{virus}_sequences.fasta",
+        refs=lambda w: f"refs/{w.virus}/{w.genotype}.fasta"
+    output:
+        aligned="results/{virus}/alignments/{genotype}_aligned.fasta"
+    params:
+        genotype="{genotype}",
+        virus="{virus}"
+    conda: "envs/mafft.yaml"
+    shell:
+        r"""
+        set -euo pipefail
+        
+        # Create output directory
+        mkdir -p results/{wildcards.virus}/alignments
+        
+        # Step 1: Get sample IDs for this genotype
+        python -c "
+        import pandas as pd
+        import sys
+        
+        try:
+            df = pd.read_csv('{input.resistance}', sep='\t')
+            
+            # Find genotype column
+            genotype_col = None
+            for col in ['genotype', 'Genotype', 'GT', 'gt', 'genotype_assignment']:
+                if col in df.columns:
+                    genotype_col = col
+                    break
+            
+            if genotype_col is None:
+                print('Error: No genotype column found', file=sys.stderr)
+                sys.exit(1)
+            
+            # Filter samples for this genotype
+            genotype_samples = df[df[genotype_col].astype(str).str.strip() == '{params.genotype}']
+            
+            # Get sample IDs (adjust column name as needed)
+            sample_col = None
+            for col in ['sample', 'Sample', 'sequence_id', 'accession', 'sequence_name']:
+                if col in df.columns:
+                    sample_col = col
+                    break
+            
+            if sample_col is None:
+                print('Error: No sample ID column found', file=sys.stderr)
+                sys.exit(1)
+            
+            # Write sample list
+            sample_ids = genotype_samples[sample_col].dropna().astype(str).str.strip().tolist()
+            with open('/tmp/{params.virus}_{params.genotype}_samples.txt', 'w') as f:
+                for sample in sample_ids:
+                    f.write(sample + '\n')
+            
+            print(f'Found {len(sample_ids)} samples for genotype {params.genotype}')
+            
+        except Exception as e:
+            print(f'Error processing resistance file: {{e}}', file=sys.stderr)
+            sys.exit(1)
+        "
+        
+        # Step 2: Extract sequences for this genotype from the main fasta
+        if [ -s "/tmp/{params.virus}_{params.genotype}_samples.txt" ]; then
+            seqkit grep \
+                -f "/tmp/{params.virus}_{params.genotype}_samples.txt" \
+                {input.sequences} \
+                > "/tmp/{params.virus}_{params.genotype}_sequences.fasta"
+        else:
+            # Create empty file if no samples
+            > "/tmp/{params.virus}_{params.genotype}_sequences.fasta"
+            echo "Warning: No samples found for genotype {params.genotype}" >&2
+        fi
+        
+        # Step 3: Combine with reference sequences and align
+        if [ -f "{input.refs}" ] && [ -s "{input.refs}" ] && [ -s "/tmp/{params.virus}_{params.genotype}_sequences.fasta" ]; then
+            # Both ref and sample sequences exist
+            echo "Aligning {params.genotype} with reference and sample sequences" >&2
+            cat "{input.refs}" "/tmp/{params.virus}_{params.genotype}_sequences.fasta" \
+                > "/tmp/{params.virus}_{params.genotype}_combined.fasta"
+            mafft --thread {threads} --auto "/tmp/{params.virus}_{params.genotype}_combined.fasta" \
+                > {output.aligned}
+        elif [ -f "{input.refs}" ] && [ -s "{input.refs}" ]; then
+            # Only ref sequences exist
+            echo "Aligning {params.genotype} with reference sequences only" >&2
+            mafft --thread {threads} --auto "{input.refs}" \
+                > {output.aligned}
+        elif [ -s "/tmp/{params.virus}_{params.genotype}_sequences.fasta" ]; then
+            # Only sample sequences exist
+            echo "Aligning {params.genotype} with sample sequences only" >&2
+            mafft --thread {threads} --auto "/tmp/{params.virus}_{params.genotype}_sequences.fasta" \
+                > {output.aligned}
+        else:
+            # No sequences at all - create empty output
+            echo "No sequences found for genotype {params.genotype}" > {output.aligned}
+            echo "Warning: No sequences found for genotype {params.genotype}" >&2
+        fi
+        
+        # Cleanup
+        rm -f "/tmp/{params.virus}_{params.genotype}_*.fasta" \
+              "/tmp/{params.virus}_{params.genotype}_samples.txt" 2>/dev/null || true
+        """
+
+# Rule to generate all genotype alignments for a virus
+rule all_genotype_alignments:
+    input:
+        lambda w: expand(
+            "results/{virus}/alignments/{genotype}_aligned.fasta",
+            virus=w.virus,
+            genotype=get_genotype_groups(w)
+        )
+    output:
+        touch("results/{virus}/genotype_alignments.done")
+    conda: "envs/python.yaml"  # Add this line - pandas is in your python environment

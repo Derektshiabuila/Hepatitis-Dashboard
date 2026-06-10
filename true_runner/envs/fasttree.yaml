@@ -1,0 +1,6 @@
+name: fasttree-env
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - fasttree

@@ -1,0 +1,298 @@
+IQ-TREE 2.2.2.6 COVID-edition built May 27 2023
+
+Input file name: hev_ref_msa.fasta
+Type of analysis: tree reconstruction + ultrafast bootstrap (1000 replicates)
+Random seed number: 8640
+
+REFERENCES
+----------
+
+To cite IQ-TREE please use:
+
+Bui Quang Minh, Heiko A. Schmidt, Olga Chernomor, Dominik Schrempf,
+Michael D. Woodhams, Arndt von Haeseler, and Robert Lanfear (2020)
+IQ-TREE 2: New models and efficient methods for phylogenetic inference
+in the genomic era. Mol. Biol. Evol., in press.
+https://doi.org/10.1093/molbev/msaa015
+
+Since you used ultrafast bootstrap (UFBoot) please also cite: 
+
+Diep Thi Hoang, Olga Chernomor, Arndt von Haeseler, Bui Quang Minh,
+and Le Sy Vinh (2018) UFBoot2: Improving the ultrafast bootstrap
+approximation. Mol. Biol. Evol., 35:518–522.
+https://doi.org/10.1093/molbev/msx281
+
+SEQUENCE ALIGNMENT
+------------------
+
+Input data: 42 sequences with 7551 nucleotide sites
+Number of constant sites: 3591 (= 47.5566% of all sites)
+Number of invariant (constant or ambiguous constant) sites: 3591 (= 47.5566% of all sites)
+Number of parsimony informative sites: 3374
+Number of distinct site patterns: 3700
+
+SUBSTITUTION PROCESS
+--------------------
+
+Model of substitution: GTR+F+G4
+
+Rate parameter R:
+
+  A-C: 1.7018
+  A-G: 12.5046
+  A-T: 2.4751
+  C-G: 0.8959
+  C-T: 16.9786
+  G-T: 1.0000
+
+State frequencies: (empirical counts from alignment)
+
+  pi(A) = 0.1825
+  pi(C) = 0.2955
+  pi(G) = 0.2615
+  pi(T) = 0.2606
+
+Rate matrix Q:
+
+  A   -0.9815    0.1117    0.7265    0.1433
+  C   0.06898    -1.104   0.05205    0.9829
+  G    0.5069    0.0588   -0.6236   0.05789
+  T    0.1003     1.114    0.0581    -1.273
+
+Model of rate heterogeneity: Gamma with 4 categories
+Gamma shape alpha: 0.2263
+
+ Category  Relative_rate  Proportion
+  1         0.001186       0.25
+  2         0.05022        0.25
+  3         0.4489         0.25
+  4         3.5            0.25
+Relative rates are computed as MEAN of the portion of the Gamma distribution falling in the category.
+
+MAXIMUM LIKELIHOOD TREE
+-----------------------
+
+Log-likelihood of the tree: -117335.9411 (s.e. 1389.6276)
+Unconstrained log-likelihood (without tree): -44507.8906
+Number of free parameters (#branches + #model parameters): 90
+Akaike information criterion (AIC) score: 234851.8821
+Corrected Akaike information criterion (AICc) score: 234854.0778
+Bayesian information criterion (BIC) score: 235475.5313
+
+Total tree length (sum of branch lengths): 7.6159
+Sum of internal branch lengths: 2.6709 (35.0698% of tree length)
+
+NOTE: Tree is UNROOTED although outgroup taxon 'ref_AB074915' is drawn at root
+Numbers in parentheses are  ultrafast bootstrap support (%)
+
++--ref_AB074915
+|
+|        +--ref_AB108537
+|     +--| (87)
+|     |  +--ref_AB369688
+|  +--| (100)
+|  |  |           +---ref_AB197673
+|  |  |        +--| (43)
+|  |  |        |  +---ref_AJ272108
+|  |  |     +--| (60)
+|  |  |     |  +---ref_DQ279091
+|  |  |  +--| (65)
+|  |  |  |  +---ref_AY723745
+|  |  +--| (54)
+|  |     |                                 +--ref_AB248521
+|  |     |                              +--| (100)
+|  |     |                              |  |  +--ref_AB290313
+|  |     |                              |  +--| (100)
+|  |     |                              |     |     +--ref_AB369687
+|  |     |                              |     |  +--| (100)
+|  |     |                              |     |  |  +--ref_EU723513
+|  |     |                              |     +--| (100)
+|  |     |                              |        |  +--ref_EU360977
+|  |     |                              |        +--| (100)
+|  |     |                              |           +--ref_KJ873911
+|  |     |                           +--| (100)
+|  |     |                           |  +---ref_AF455784
+|  |     |                        +--| (100)
+|  |     |                        |  |           +--ref_AB290312
+|  |     |                        |  |        +--| (94)
+|  |     |                        |  |        |  +--ref_JQ013794
+|  |     |                        |  |     +--| (100)
+|  |     |                        |  |     |  +--ref_JQ953664
+|  |     |                        |  |  +--| (100)
+|  |     |                        |  |  |  |  +--ref_FJ705359
+|  |     |                        |  |  |  +--| (100)
+|  |     |                        |  |  |     +--ref_FJ998008
+|  |     |                        |  +--| (100)
+|  |     |                        |     |     +--ref_AB369689
+|  |     |                        |     |  +--| (37)
+|  |     |                        |     |  |  +--ref_AP003430
+|  |     |                        |     +--| (100)
+|  |     |                        |        |  +--ref_AF082843
+|  |     |                        |        +--| (75)
+|  |     |                        |           +--ref_AY115488
+|  |     |                 +------| (100)
+|  |     |                 |      |      +---ref_FJ906895
+|  |     |                 |      |   +--| (100)
+|  |     |                 |      |   |  +------------------------ref_KJ013415
+|  |     |                 |      +---| (100)
+|  |     |                 |          +-----ref_JQ013791
+|  |     |              +--| (100)
+|  |     |              |  |            +--ref_KJ496143
+|  |     |              |  +------------| (100)
+|  |     |              |               +--ref_KJ496144
+|  |     |        +-----| (100)
+|  |     |        |     |                      +--ref_AY204877
+|  |     |        |     |                   +--| (65)
+|  |     |        |     |                   |  +--ref_AY230202
+|  |     |        |     |      +------------| (100)
+|  |     |        |     |      |            |     +--ref_D11092
+|  |     |        |     |      |            |  +--| (67)
+|  |     |        |     |      |            |  |  |     +--ref_FJ457024
+|  |     |        |     |      |            |  |  |  +--| (99)
+|  |     |        |     |      |            |  |  |  |  +--ref_JF443721
+|  |     |        |     |      |            |  |  +--| (99)
+|  |     |        |     |      |            |  |     +--ref_M73218
+|  |     |        |     |      |            +--| (98)
+|  |     |        |     |      |               +--ref_X98292
+|  |     |        |     +------| (100)
+|  |     |        |            +-----------------ref_M74506
+|  |     |  +-----| (100)
+|  |     |  |     |   +----------ref_AB573435
+|  |     |  |     +---| (100)
+|  |     |  |         |   +-------ref_AB602441
+|  |     |  |         +---| (100)
+|  |     |  |             +------ref_AB856243
+|  |     +--| (65)
+|  |        +--ref_DQ450072
++--| (68)
+|  +--ref_AB220974
+|
++--ref_GU119961
+
+Tree in newick format:
+
+(ref_AB074915:0.0831348238,(((ref_AB108537:0.0935811560,ref_AB369688:0.1020202693)87:0.0087352914,((((ref_AB197673:0.1098271700,ref_AJ272108:0.1181344037)43:0.0086460865,ref_DQ279091:0.1192080844)60:0.0062927740,ref_AY723745:0.1090264796)65:0.0168161539,((((((((ref_AB248521:0.0945416283,(ref_AB290313:0.0836858935,((ref_AB369687:0.0567913640,ref_EU723513:0.0656384435)100:0.0166457066,(ref_EU360977:0.0660823234,ref_KJ873911:0.0663328890)100:0.0205985869)100:0.0214694387)100:0.0195578917)100:0.0491726143,ref_AF455784:0.1265054432)100:0.0531814651,((((ref_AB290312:0.0717397292,ref_JQ013794:0.0727126387)94:0.0123059975,ref_JQ953664:0.0941762217)100:0.0224257988,(ref_FJ705359:0.0974140424,ref_FJ998008:0.0722362350)100:0.0212343223)100:0.0291252017,((ref_AB369689:0.0817042701,ref_AP003430:0.0834480802)37:0.0030415008,(ref_AF082843:0.0687566516,ref_AY115488:0.0838221406)75:0.0110692892)100:0.0367956815)100:0.0776893389)100:0.0754509500,((ref_FJ906895:0.1266379686,ref_KJ013415:0.6958428859)100:0.0873230136,ref_JQ013791:0.1672525723)100:0.1092915079)100:0.2131391743,(ref_KJ496143:0.0957721405,ref_KJ496144:0.0885003851)100:0.3744185014)100:0.0719279570,(((ref_AY204877:0.0500197689,ref_AY230202:0.0574607345)65:0.0170312886,((ref_D11092:0.0283374669,((ref_FJ457024:0.0221972449,ref_JF443721:0.0326471892)99:0.0093960751,ref_M73218:0.0161094756)99:0.0182664112)67:0.0038717493,ref_X98292:0.0313590879)98:0.0266826370)100:0.3753056729,ref_M74506:0.4938751211)100:0.1936739609)100:0.1714544697,(ref_AB573435:0.3000025808,(ref_AB602441:0.2282881084,ref_AB856243:0.2080602301)100:0.1097816536)100:0.1177081540)100:0.1858616300,ref_DQ450072:0.0986741947)65:0.0321241985)54:0.0089422680)100:0.0238690756,ref_AB220974:0.0850941790)68:0.0105520220,ref_GU119961:0.0983586110);
+
+CONSENSUS TREE
+--------------
+
+Consensus tree is constructed from 1000 bootstrap trees
+Log-likelihood of consensus tree: -117336.261193
+Robinson-Foulds distance between ML tree and consensus tree: 2
+
+Branches with support >0.000000% are kept (extended consensus)
+Branch lengths are optimized by maximum likelihood on original alignment
+Numbers in parentheses are bootstrap supports (%)
+
++--ref_AB074915
+|
+|        +--ref_AB108537
+|     +--| (87)
+|     |  +--ref_AB369688
+|  +--| (100)
+|  |  |        +---ref_AB197673
+|  |  |     +--| (60)
+|  |  |     |  |  +---ref_AJ272108
+|  |  |     |  +--| (55)
+|  |  |     |     +---ref_DQ279091
+|  |  |  +--| (65)
+|  |  |  |  +---ref_AY723745
+|  |  +--| (54)
+|  |     |                                 +--ref_AB248521
+|  |     |                              +--| (100)
+|  |     |                              |  |  +--ref_AB290313
+|  |     |                              |  +--| (100)
+|  |     |                              |     |     +--ref_AB369687
+|  |     |                              |     |  +--| (100)
+|  |     |                              |     |  |  +--ref_EU723513
+|  |     |                              |     +--| (100)
+|  |     |                              |        |  +--ref_EU360977
+|  |     |                              |        +--| (100)
+|  |     |                              |           +--ref_KJ873911
+|  |     |                           +--| (100)
+|  |     |                           |  +---ref_AF455784
+|  |     |                        +--| (100)
+|  |     |                        |  |           +--ref_AB290312
+|  |     |                        |  |        +--| (94)
+|  |     |                        |  |        |  +--ref_JQ013794
+|  |     |                        |  |     +--| (100)
+|  |     |                        |  |     |  +--ref_JQ953664
+|  |     |                        |  |  +--| (100)
+|  |     |                        |  |  |  |  +--ref_FJ705359
+|  |     |                        |  |  |  +--| (100)
+|  |     |                        |  |  |     +--ref_FJ998008
+|  |     |                        |  +--| (100)
+|  |     |                        |     |     +--ref_AB369689
+|  |     |                        |     |  +--| (37)
+|  |     |                        |     |  |  +--ref_AP003430
+|  |     |                        |     +--| (100)
+|  |     |                        |        |  +--ref_AF082843
+|  |     |                        |        +--| (75)
+|  |     |                        |           +--ref_AY115488
+|  |     |                 +------| (100)
+|  |     |                 |      |      +---ref_FJ906895
+|  |     |                 |      |   +--| (100)
+|  |     |                 |      |   |  +------------------------ref_KJ013415
+|  |     |                 |      +---| (100)
+|  |     |                 |          +-----ref_JQ013791
+|  |     |              +--| (100)
+|  |     |              |  |            +--ref_KJ496143
+|  |     |              |  +------------| (100)
+|  |     |              |               +--ref_KJ496144
+|  |     |        +-----| (100)
+|  |     |        |     |                      +--ref_AY204877
+|  |     |        |     |                   +--| (65)
+|  |     |        |     |                   |  +--ref_AY230202
+|  |     |        |     |      +------------| (100)
+|  |     |        |     |      |            |     +--ref_D11092
+|  |     |        |     |      |            |  +--| (67)
+|  |     |        |     |      |            |  |  |     +--ref_FJ457024
+|  |     |        |     |      |            |  |  |  +--| (99)
+|  |     |        |     |      |            |  |  |  |  +--ref_JF443721
+|  |     |        |     |      |            |  |  +--| (99)
+|  |     |        |     |      |            |  |     +--ref_M73218
+|  |     |        |     |      |            +--| (98)
+|  |     |        |     |      |               +--ref_X98292
+|  |     |        |     +------| (100)
+|  |     |        |            +-----------------ref_M74506
+|  |     |  +-----| (100)
+|  |     |  |     |   +----------ref_AB573435
+|  |     |  |     +---| (100)
+|  |     |  |         |   +-------ref_AB602441
+|  |     |  |         +---| (100)
+|  |     |  |             +------ref_AB856243
+|  |     +--| (65)
+|  |        +--ref_DQ450072
++--| (68)
+|  +--ref_AB220974
+|
++--ref_GU119961
+
+
+Consensus tree in newick format: 
+
+(ref_AB074915:0.0831371638,(((ref_AB108537:0.0935919121,ref_AB369688:0.1019738218)87:0.0092754800,(((ref_AB197673:0.1147214206,(ref_AJ272108:0.1169291324,ref_DQ279091:0.1130966210)55:0.0100014627)60:0.0062160113,ref_AY723745:0.1087238540)65:0.0168618310,((((((((ref_AB248521:0.0945662391,(ref_AB290313:0.0836989270,((ref_AB369687:0.0568017128,ref_EU723513:0.0656578445)100:0.0166558820,(ref_EU360977:0.0661160809,ref_KJ873911:0.0663706980)100:0.0205797454)100:0.0214556072)100:0.0195783518)100:0.0492379548,ref_AF455784:0.1264848616)100:0.0531605049,((((ref_AB290312:0.0717547110,ref_JQ013794:0.0727410836)94:0.0123045944,ref_JQ953664:0.0942003586)100:0.0224289314,(ref_FJ705359:0.0974318623,ref_FJ998008:0.0722579300)100:0.0212384069)100:0.0291109614,((ref_AB369689:0.0817268219,ref_AP003430:0.0834606743)37:0.0030503857,(ref_AF082843:0.0687730381,ref_AY115488:0.0838405711)75:0.0110693137)100:0.0368441908)100:0.0777103398)100:0.0755646825,((ref_FJ906895:0.1266640864,ref_KJ013415:0.6958910844)100:0.0877260946,ref_JQ013791:0.1671798817)100:0.1091632590)100:0.2131837856,(ref_KJ496143:0.0955466078,ref_KJ496144:0.0887149255)100:0.3742494388)100:0.0720855333,(((ref_AY204877:0.0500152262,ref_AY230202:0.0574784924)65:0.0164500863,((ref_D11092:0.0283439981,((ref_FJ457024:0.0222083403,ref_JF443721:0.0326550574)99:0.0093912035,ref_M73218:0.0161150846)99:0.0182714855)67:0.0038773494,ref_X98292:0.0313709941)98:0.0271923750)100:0.3753778427,ref_M74506:0.4939790686)100:0.1933997764)100:0.1713437377,(ref_AB573435:0.3002246570,(ref_AB602441:0.2285923442,ref_AB856243:0.2081628530)100:0.1095077825)100:0.1176266537)100:0.1862647587,ref_DQ450072:0.0986940052)65:0.0321435348)54:0.0089982827)100:0.0233279202,ref_AB220974:0.0850762143)68:0.0106553867,ref_GU119961:0.0983990410);
+
+ALISIM COMMAND
+--------------
+To simulate an alignment of the same length as the original alignment, using the tree and model parameters estimated from this analysis, you can use the following command:
+
+--alisim simulated_MSA -t ref_tree.treefile -m "GTR{1.70175,12.5046,2.47508,0.895889,16.9786}+F{0.182451,0.295451,0.261513,0.260585}+G4{0.22634}" --length 7551
+
+To mimic the alignment used to produce this analysis, i.e. simulate an alignment of the same length as the original alignment, using the tree and model parameters estimated from this analysis *and* copying the same gap positions as the original alignment, you can use the following command:
+
+iqtree -s hev_ref_msa.fasta --alisim mimicked_MSA
+
+To simulate any number of alignments in either of the two commandlines above, use the --num-alignments options, for example mimic 100 alignments you would use the command line:
+
+iqtree -s hev_ref_msa.fasta --alisim mimicked_MSA --num-alignments 100
+
+For more information on using AliSim, please visit: www.iqtree.org/doc/AliSim
+
+TIME STAMP
+----------
+
+Date and time: Sun Jun  7 17:14:52 2026
+Total CPU time used: 225.891542 seconds (0h:3m:45s)
+Total wall-clock time used: 59.70298195 seconds (0h:0m:59s)
+
