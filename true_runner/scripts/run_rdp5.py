@@ -143,18 +143,24 @@ def _on_windows() -> bool:
 
 
 def _ensure_local_wine_image() -> str:
-    image_name = "local-wine:latest"
+    image_name = "local-wine-vb6:latest"
     # Check if image exists
     res = subprocess.run(["docker", "images", "-q", image_name], capture_output=True, text=True)
     if res.stdout.strip():
         return image_name
     
-    log.info("Building local-wine Docker image (this runs once and is very lightweight)...")
+    log.info("Building local-wine-vb6 Docker image (this runs once and is very lightweight)...")
     dockerfile_content = """FROM debian:stable-slim
 RUN dpkg --add-architecture i386 && \\
     apt-get update && \\
-    apt-get install -y --no-install-recommends wine wine32 && \\
+    apt-get install -y --no-install-recommends wine wine32 cabextract curl && \\
     rm -rf /var/lib/apt/lists/*
+RUN curl -fSL -o /tmp/xpsp3.exe http://www.download.windowsupdate.com/msdownload/update/software/dflt/2008/04/windowsxp-kb936929-sp3-x86-enu_c81472f7eeea2eca421e116cd4c03e2300ebfde4.exe && \\
+    cabextract -d /tmp -L -F "*msvbvm60.dl*" /tmp/xpsp3.exe && \\
+    find /tmp -name "*msvbvm60.dl*" -exec cabextract -d /tmp -L {} \\; && \\
+    mkdir -p /opt/dlls && \\
+    find /tmp -name "msvbvm60.dll" -exec cp {} /opt/dlls/MSVBVM60.DLL \\; && \\
+    rm -rf /tmp/xpsp3.exe /tmp/msvbvm60.dl_ /tmp/i386 /tmp/msvbvm60.dll
 """
     # Create the tmp directory inside the project root (which starts with /home/...)
     project_root = Path(__file__).parent.parent.resolve()
@@ -171,11 +177,11 @@ RUN dpkg --add-architecture i386 && \\
                 text=True
             )
             if build_res.returncode != 0:
-                log.error("Failed to build local-wine image: %s", build_res.stderr)
-                raise RuntimeError(f"Failed to build local-wine image: {build_res.stderr}")
+                log.error("Failed to build local-wine-vb6 image: %s", build_res.stderr)
+                raise RuntimeError(f"Failed to build local-wine-vb6 image: {build_res.stderr}")
     finally:
         shutil.rmtree(tmp_base, ignore_errors=True)
-    log.info("Successfully built local-wine Docker image.")
+    log.info("Successfully built local-wine-vb6 Docker image.")
     return image_name
 
 
@@ -243,6 +249,7 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                     f"WINEARCH=win32 WINEPREFIX=/tmp/wineprefix wineboot --init && "
                     f"mkdir -p '/tmp/wineprefix/drive_c/Program Files/RDP5' && "
                     f"cp RDP.ini PairsScores BinProbs '/tmp/wineprefix/drive_c/Program Files/RDP5/' && "
+                    f"cp /opt/dlls/MSVBVM60.DLL /tmp/wineprefix/drive_c/windows/system32/ && "
                     f"WINEPREFIX=/tmp/wineprefix wine {exe_rel} -f{fasta_rel} -nor"
                 )
             ]
