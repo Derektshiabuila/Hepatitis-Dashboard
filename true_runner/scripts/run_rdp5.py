@@ -143,18 +143,19 @@ def _on_windows() -> bool:
 
 
 def _ensure_local_wine_image() -> str:
-    image_name = "local-wine-vb6-xvfb:v2"
+    image_name = "local-wine-vb6-xvfb:v3"
     # Check if image exists
     res = subprocess.run(["docker", "images", "-q", image_name], capture_output=True, text=True)
     if res.stdout.strip():
         return image_name
     
-    log.info("Building local-wine-vb6-xvfb:v2 Docker image (this runs once and is very lightweight)...")
+    log.info("Building local-wine-vb6-xvfb:v3 Docker image (this runs once and is very lightweight)...")
     dockerfile_content = """FROM debian:stable-slim
 RUN dpkg --add-architecture i386 && \\
     apt-get update && \\
     apt-get install -y wine wine32 cabextract curl xvfb xauth && \\
     rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 RUN curl -fSL -o /tmp/xpsp3.exe http://www.download.windowsupdate.com/msdownload/update/software/dflt/2008/04/windowsxp-kb936929-sp3-x86-enu_c81472f7eeea2eca421e116cd4c03e2300ebfde4.exe && \\
     cabextract -d /tmp -L -F "*msvbvm60.dl*" /tmp/xpsp3.exe && \\
     find /tmp -name "*msvbvm60.dl*" -exec cabextract -d /tmp -L {} \\; && \\
@@ -177,11 +178,11 @@ RUN curl -fSL -o /tmp/xpsp3.exe http://www.download.windowsupdate.com/msdownload
                 text=True
             )
             if build_res.returncode != 0:
-                log.error("Failed to build local-wine-vb6-xvfb:v2 image: %s", build_res.stderr)
-                raise RuntimeError(f"Failed to build local-wine-vb6-xvfb:v2 image: {build_res.stderr}")
+                log.error("Failed to build local-wine-vb6-xvfb:v3 image: %s", build_res.stderr)
+                raise RuntimeError(f"Failed to build local-wine-vb6-xvfb:v3 image: {build_res.stderr}")
     finally:
         shutil.rmtree(tmp_base, ignore_errors=True)
-    log.info("Successfully built local-wine-vb6-xvfb:v2 Docker image.")
+    log.info("Successfully built local-wine-vb6-xvfb:v3 Docker image.")
     return image_name
 
 
@@ -244,13 +245,13 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                 "-e", "HOME=/tmp",
                 "-u", f"{uid}:{gid}",
                 image_name,
-                "sh", "-c", (
+                "xvfb-run", "-a", "-s", "-nolisten unix", "sh", "-c", (
                     f"mkdir -p /tmp/wineprefix && "
                     f"WINEARCH=win32 WINEPREFIX=/tmp/wineprefix wineboot --init && "
                     f"mkdir -p '/tmp/wineprefix/drive_c/Program Files/RDP5' && "
                     f"cp RDP.ini PairsScores BinProbs '/tmp/wineprefix/drive_c/Program Files/RDP5/' && "
                     f"cp /opt/dlls/MSVBVM60.DLL /tmp/wineprefix/drive_c/windows/system32/ && "
-                    f"WINEPREFIX=/tmp/wineprefix xvfb-run -a wine {exe_rel} -f{fasta_rel} -nor"
+                    f"WINEPREFIX=/tmp/wineprefix wine {exe_rel} -f{fasta_rel} -nor"
                 )
             ]
             
