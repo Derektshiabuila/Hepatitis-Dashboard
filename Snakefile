@@ -402,7 +402,7 @@ if not genotype_col or not sample_col:
     print('ERROR: missing genotype or sample column', file=sys.stderr); sys.exit(1)
 ids = df[df[genotype_col].astype(str).str.strip() == '{params.genotype}'][sample_col].dropna().astype(str).str.strip().tolist()
 open('/tmp/{params.virus}_{params.genotype}_samples.txt', 'w').write('\n'.join(ids) + '\n')
-print("Found %d samples for genotype %s" % (len(ids), "{params.genotype}"))
+print('Found %d samples for genotype %s' % (len(ids), '{params.genotype}'))
 "
 
         if [ -s "/tmp/{params.virus}_{params.genotype}_samples.txt" ]; then

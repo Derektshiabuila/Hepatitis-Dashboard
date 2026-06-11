@@ -438,7 +438,7 @@ rule genotype_alignment:
                 for sample in sample_ids:
                     f.write(sample + '\n')
             
-            print("Found %d samples for genotype %s" % (len(sample_ids), "{params.genotype}"))
+            print('Found %d samples for genotype %s' % (len(sample_ids), '{params.genotype}'))
             
         except Exception as e:
             print(f'Error processing resistance file: {{e}}', file=sys.stderr)
