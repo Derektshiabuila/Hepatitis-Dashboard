@@ -465,11 +465,6 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
     elapsed = time.time() - start
     log.info("RDP5 finished in %.1f s (exit code %d)", elapsed, proc.returncode)
 
-    if proc.stdout:
-        log.debug("STDOUT:\n%s", proc.stdout[-3000:])
-    if proc.stderr:
-        log.debug("STDERR:\n%s", proc.stderr[-3000:])
-
     # RDP5 returns non-zero even on success in some versions — we check
     # for output rather than exit code.
     if proc.returncode not in (0, 1):
@@ -477,6 +472,15 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
             "RDP5 exited with code %d. Will attempt to parse output anyway.",
             proc.returncode,
         )
+        if proc.stdout:
+            log.info("RDP5 STDOUT:\n%s", proc.stdout[-3000:])
+        if proc.stderr:
+            log.warning("RDP5 STDERR:\n%s", proc.stderr[-3000:])
+    else:
+        if proc.stdout:
+            log.debug("STDOUT:\n%s", proc.stdout[-3000:])
+        if proc.stderr:
+            log.debug("STDERR:\n%s", proc.stderr[-3000:])
 
     # ── Locate and Move the CSV RDP5 wrote ─────────────────────────────────
     csv_src = rdp5_dir / f"{label}.fasta.csv"
@@ -502,9 +506,14 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
             # Cleanup FASTA before raising error
             if work_fasta.exists():
                 work_fasta.unlink()
+            if proc.stdout:
+                log.error("RDP5 STDOUT on failure:\n%s", proc.stdout)
+            if proc.stderr:
+                log.error("RDP5 STDERR on failure:\n%s", proc.stderr)
             raise RuntimeError(
-                f"RDP5 failed to generate any CSV output for {label} in {rdp5_dir}. "
-                "Check command arguments or Wine execution logs."
+                f"RDP5 failed to generate any CSV output for {label} in {rdp5_dir}.\n"
+                f"Exit code: {proc.returncode}\n"
+                f"Check command arguments or Wine execution logs."
             )
 
     # ── Parse and write normalised TSV ────────────────────────────────────
