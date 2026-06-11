@@ -142,6 +142,35 @@ def _on_windows() -> bool:
     return platform.system() == "Windows"
 
 
+def _ensure_local_wine_image() -> str:
+    image_name = "local-wine:latest"
+    # Check if image exists
+    res = subprocess.run(["docker", "images", "-q", image_name], capture_output=True, text=True)
+    if res.stdout.strip():
+        return image_name
+    
+    log.info("Building local-wine Docker image (this runs once and is very lightweight)...")
+    dockerfile_content = """FROM debian:stable-slim
+RUN dpkg --add-architecture i386 && \\
+    apt-get update && \\
+    apt-get install -y --no-install-recommends wine wine32 && \\
+    rm -rf /var/lib/apt/lists/*
+"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        df_path = Path(tmpdir) / "Dockerfile"
+        df_path.write_text(dockerfile_content)
+        build_res = subprocess.run(
+            ["docker", "build", "-t", image_name, tmpdir],
+            capture_output=True,
+            text=True
+        )
+        if build_res.returncode != 0:
+            log.error("Failed to build local-wine image: %s", build_res.stderr)
+            raise RuntimeError(f"Failed to build local-wine image: {build_res.stderr}")
+    log.info("Successfully built local-wine Docker image.")
+    return image_name
+
+
 def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
     """
     Build the RDP5CL.exe command line.
@@ -176,13 +205,38 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
 
         if not wine_exe:
             wine_exe = shutil.which(WINE)
-            if not wine_exe:
-                raise EnvironmentError(
-                    f"Wine not found (looked for '{WINE}'). "
-                    "Install Wine to run RDP5CL.exe on Linux:\n"
-                    "  sudo apt install wine"
-                )
-        return [wine_exe, exe_str, f"-f{fasta_str}", "-nor"]
+            
+        if wine_exe:
+            return [wine_exe, exe_str, f"-f{fasta_str}", "-nor"]
+            
+        # Fallback to Docker
+        docker_exe = shutil.which("docker")
+        if docker_exe:
+            log.info("Wine not found on host. Attempting to run via Docker container...")
+            image_name = _ensure_local_wine_image()
+            
+            rdp5_dir = rdp5_exe.parent.resolve()
+            exe_rel = rdp5_exe.name
+            fasta_rel = fasta_path.name
+            
+            uid = os.getuid() if hasattr(os, "getuid") else 0
+            gid = os.getgid() if hasattr(os, "getgid") else 0
+            
+            return [
+                docker_exe, "run", "--rm",
+                "-v", f"{rdp5_dir}:/work",
+                "-w", "/work",
+                "-e", "WINEDEBUG=-all",
+                "-u", f"{uid}:{gid}",
+                image_name,
+                "sh", "-c", f"mkdir -p /tmp/wineprefix && WINEPREFIX=/tmp/wineprefix wine {exe_rel} -f{fasta_rel} -nor"
+            ]
+            
+        raise EnvironmentError(
+            f"Wine not found (looked for '{WINE}') and Docker is not available. "
+            "Install Wine or Docker to run RDP5CL.exe on Linux:\n"
+            "  sudo apt install wine  OR  install docker"
+        )
 
 
 
