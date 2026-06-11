@@ -234,7 +234,8 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                 docker_exe, "run", "--rm",
                 "-v", f"{rdp5_dir}:/work",
                 "-w", "/work",
-                "-e", "WINEDEBUG=-all",
+                "-e", "WINEDEBUG=+err",
+                "-e", "HOME=/tmp",
                 "-u", f"{uid}:{gid}",
                 image_name,
                 "sh", "-c", (
