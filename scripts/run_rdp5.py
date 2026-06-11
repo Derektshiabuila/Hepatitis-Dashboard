@@ -143,17 +143,17 @@ def _on_windows() -> bool:
 
 
 def _ensure_local_wine_image() -> str:
-    image_name = "local-wine-vb6-xvfb:latest"
+    image_name = "local-wine-vb6-xvfb:v2"
     # Check if image exists
     res = subprocess.run(["docker", "images", "-q", image_name], capture_output=True, text=True)
     if res.stdout.strip():
         return image_name
     
-    log.info("Building local-wine-vb6-xvfb Docker image (this runs once and is very lightweight)...")
+    log.info("Building local-wine-vb6-xvfb:v2 Docker image (this runs once and is very lightweight)...")
     dockerfile_content = """FROM debian:stable-slim
 RUN dpkg --add-architecture i386 && \\
     apt-get update && \\
-    apt-get install -y --no-install-recommends wine wine32 cabextract curl xvfb xauth && \\
+    apt-get install -y wine wine32 cabextract curl xvfb xauth && \\
     rm -rf /var/lib/apt/lists/*
 RUN curl -fSL -o /tmp/xpsp3.exe http://www.download.windowsupdate.com/msdownload/update/software/dflt/2008/04/windowsxp-kb936929-sp3-x86-enu_c81472f7eeea2eca421e116cd4c03e2300ebfde4.exe && \\
     cabextract -d /tmp -L -F "*msvbvm60.dl*" /tmp/xpsp3.exe && \\
@@ -177,11 +177,11 @@ RUN curl -fSL -o /tmp/xpsp3.exe http://www.download.windowsupdate.com/msdownload
                 text=True
             )
             if build_res.returncode != 0:
-                log.error("Failed to build local-wine-vb6-xvfb image: %s", build_res.stderr)
-                raise RuntimeError(f"Failed to build local-wine-vb6-xvfb image: {build_res.stderr}")
+                log.error("Failed to build local-wine-vb6-xvfb:v2 image: %s", build_res.stderr)
+                raise RuntimeError(f"Failed to build local-wine-vb6-xvfb:v2 image: {build_res.stderr}")
     finally:
         shutil.rmtree(tmp_base, ignore_errors=True)
-    log.info("Successfully built local-wine-vb6-xvfb Docker image.")
+    log.info("Successfully built local-wine-vb6-xvfb:v2 Docker image.")
     return image_name
 
 
