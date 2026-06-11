@@ -156,17 +156,25 @@ RUN dpkg --add-architecture i386 && \\
     apt-get install -y --no-install-recommends wine wine32 && \\
     rm -rf /var/lib/apt/lists/*
 """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        df_path = Path(tmpdir) / "Dockerfile"
-        df_path.write_text(dockerfile_content)
-        build_res = subprocess.run(
-            ["docker", "build", "-t", image_name, tmpdir],
-            capture_output=True,
-            text=True
-        )
-        if build_res.returncode != 0:
-            log.error("Failed to build local-wine image: %s", build_res.stderr)
-            raise RuntimeError(f"Failed to build local-wine image: {build_res.stderr}")
+    # Create the tmp directory inside the project root (which starts with /home/...)
+    project_root = Path(__file__).parent.parent.resolve()
+    tmp_base = project_root / ".tmp_docker_build"
+    tmp_base.mkdir(exist_ok=True)
+    
+    try:
+        with tempfile.TemporaryDirectory(dir=str(tmp_base)) as tmpdir:
+            df_path = Path(tmpdir) / "Dockerfile"
+            df_path.write_text(dockerfile_content)
+            build_res = subprocess.run(
+                ["docker", "build", "-t", image_name, tmpdir],
+                capture_output=True,
+                text=True
+            )
+            if build_res.returncode != 0:
+                log.error("Failed to build local-wine image: %s", build_res.stderr)
+                raise RuntimeError(f"Failed to build local-wine image: {build_res.stderr}")
+    finally:
+        shutil.rmtree(tmp_base, ignore_errors=True)
     log.info("Successfully built local-wine Docker image.")
     return image_name
 
