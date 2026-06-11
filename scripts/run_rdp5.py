@@ -238,10 +238,10 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                 "-u", f"{uid}:{gid}",
                 image_name,
                 "sh", "-c", (
-                    f"mkdir -p '/tmp/wineprefix/drive_c/Program Files/RDP5' "
-                    f"'/tmp/wineprefix/drive_c/Program Files (x86)/RDP5' && "
+                    f"mkdir -p /tmp/wineprefix && "
+                    f"WINEARCH=win32 WINEPREFIX=/tmp/wineprefix wineboot --init && "
+                    f"mkdir -p '/tmp/wineprefix/drive_c/Program Files/RDP5' && "
                     f"cp RDP.ini PairsScores BinProbs '/tmp/wineprefix/drive_c/Program Files/RDP5/' && "
-                    f"cp RDP.ini PairsScores BinProbs '/tmp/wineprefix/drive_c/Program Files (x86)/RDP5/' && "
                     f"WINEPREFIX=/tmp/wineprefix wine {exe_rel} -f{fasta_rel} -nor"
                 )
             ]
