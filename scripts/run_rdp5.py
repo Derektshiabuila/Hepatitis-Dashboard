@@ -274,14 +274,28 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
         except Exception as e:
             log.warning("Failed to clean up old 3seq output file %s: %s", p, e)
 
+    # Find P-value table file
+    script_dir = Path(__file__).resolve().parent
+    ptable_path = script_dir / "PVT.3SEQ.2017.700"
+    if not ptable_path.exists():
+        ptable_path = Path.cwd() / "PVT.3SEQ.2017.700"
+
     # 3seq command
     cmd = [
         str(threeseq_exe),
         "-full",
         str(fasta_path.resolve()),
+    ]
+    if ptable_path.exists():
+        cmd.extend(["-ptable", str(ptable_path.resolve())])
+        log.info("Using P-value table: %s", ptable_path)
+    else:
+        log.warning("P-value table file not found. 3seq might fail.")
+
+    cmd.extend([
         "-id", run_id,
         "-p"
-    ]
+    ])
     log.info("Running: %s", " ".join(cmd))
     log.info("Cwd: %s", outdir)
 

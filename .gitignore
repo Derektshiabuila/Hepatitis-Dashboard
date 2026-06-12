@@ -42,3 +42,6 @@ results/**/glue/
 # Large raw dataset
 data/IHME-GBD_2021_DATA-9e7ec2c0-1.csv
 true_runner/data/IHME-GBD_2021_DATA-9e7ec2c0-1.csv
+
+# 3seq P-value table file (457MB, must be copied out-of-band)
+**/PVT.3SEQ.2017.700
