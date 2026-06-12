@@ -246,14 +246,14 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                 "-e", "HOME=/tmp",
                 "-u", f"{uid}:{gid}",
                 image_name,
-                "xvfb-run", "-a", "--server-args=-screen 0 640x480x8 -nolisten unix", "sh", "-c", (
+                "sh", "-c", (
                     f"set -x && "
                     f"mkdir -p /tmp/wineprefix && "
                     f"WINEARCH=win32 WINEPREFIX=/tmp/wineprefix wineboot --init && "
                     f"mkdir -p '/tmp/wineprefix/drive_c/Program Files/RDP5' && "
                     f"cp RDP.ini PairsScores BinProbs '/tmp/wineprefix/drive_c/Program Files/RDP5/' && "
                     f"cp /opt/dlls/MSVBVM60.DLL /tmp/wineprefix/drive_c/windows/system32/ && "
-                    f"WINEPREFIX=/tmp/wineprefix wine {exe_rel} -f{fasta_rel} -nor"
+                    f"WINEPREFIX=/tmp/wineprefix xvfb-run -a --server-args=\"-screen 0 640x480x8 -nolisten unix\" wine {exe_rel} -f{fasta_rel} -nor"
                 )
             ]
             
@@ -529,7 +529,7 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
         proc = subprocess.run(
             cmd,
             cwd=str(rdp5_dir),       # RDP5 looks for RDP.ini and helper exes in cwd
-            capture_output=True,
+            capture_output=False,
             text=True,
             timeout=RDP5_TIMEOUT,
         )
