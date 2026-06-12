@@ -256,15 +256,18 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                 image_name,
                 "sh", "-c", (
                     f"set -x && "
+                    f"Xvfb :99 -screen 0 640x480x8 -listen tcp & X_PID=$! && "
+                    f"sleep 2 && "
                     f"cp -rp /opt/wineprefix /tmp/wineprefix && "
                     f"cp RDP.ini /tmp/wineprefix/drive_c/RDP5/RDP.ini && "
                     f"cp {fasta_rel} /tmp/wineprefix/drive_c/RDP5/{fasta_rel} && "
-                    f"WINEPREFIX=/tmp/wineprefix wine regsvr32 /s COMDLG32.OCX && "
-                    f"WINEPREFIX=/tmp/wineprefix wine regsvr32 /s COMCTL32.OCX && "
-                    f"WINEPREFIX=/tmp/wineprefix wine regsvr32 /s THREED32.OCX && "
+                    f"WINEPREFIX=/tmp/wineprefix DISPLAY=127.0.0.1:99 wine regsvr32 /s COMDLG32.OCX ; "
+                    f"WINEPREFIX=/tmp/wineprefix DISPLAY=127.0.0.1:99 wine regsvr32 /s COMCTL32.OCX ; "
+                    f"WINEPREFIX=/tmp/wineprefix DISPLAY=127.0.0.1:99 wine regsvr32 /s THREED32.OCX ; "
                     f"cd /tmp/wineprefix/drive_c/RDP5 && "
-                    f"WINEPREFIX=/tmp/wineprefix xvfb-run -a --server-args=\"-screen 0 640x480x8\" wine RDP5CL.exe -f{fasta_rel} -nor && "
-                    f"cp {fasta_rel}.csv /work/ 2>/dev/null || cp *{fasta_rel}*.csv /work/ 2>/dev/null || true"
+                    f"WINEPREFIX=/tmp/wineprefix DISPLAY=127.0.0.1:99 wine RDP5CL.exe -f{fasta_rel} -nor && "
+                    f"cp {fasta_rel}.csv /work/ 2>/dev/null || cp *{fasta_rel}*.csv /work/ 2>/dev/null || true ; "
+                    f"kill $X_PID"
                 )
             ]
             
