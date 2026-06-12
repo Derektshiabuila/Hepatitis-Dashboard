@@ -21,39 +21,40 @@ def run_diagnostics():
         
     print(f"Scripts Directory: {scripts_dir}")
 
+    # Copy hev_RDP.ini from root/parent directory to scripts_dir/RDP.ini
+    root_dir = scripts_dir.parent
+    src_ini = root_dir / "hev_RDP.ini"
+    dest_ini = scripts_dir / "RDP.ini"
+    if src_ini.exists():
+        import shutil
+        print(f"Copying config: {src_ini} -> {dest_ini}")
+        shutil.copy(src_ini, dest_ini)
+    else:
+        print(f"Warning: {src_ini} not found")
+
     image_name = "local-wine-vb6-xvfb:v3"
+
     
     # We will execute a diagnostic shell script inside the container
     shell_script = """set -x
 echo "=== Container Environment ==="
 id
 
-# 1. Initialize Wine prefix
-mkdir -p /tmp/wineprefix
-WINEARCH=win32 WINEPREFIX=/tmp/wineprefix wineboot --init
+# Verify files exist in work dir
+ls -la
 
-# 2. Copy RDP5 files
-mkdir -p /tmp/wineprefix/drive_c/Program Files/RDP5
-cp RDP.ini PairsScores BinProbs /tmp/wineprefix/drive_c/Program Files/RDP5/
-cp /opt/dlls/MSVBVM60.DLL /tmp/wineprefix/drive_c/windows/system32/
-
-# 3. Start Xvfb directly in background
-Xvfb :99 -screen 0 640x480x8 > /tmp/xvfb.log 2>&1 &
-XVFB_PID=$!
-sleep 2
-
-# Verify Xvfb started
-ps -p $XVFB_PID || (echo "Xvfb failed to start" && cat /tmp/xvfb.log && exit 1)
-
-# 4. Run RDP5CL.exe using wine pointing to display :99
-export DISPLAY=:99
-export WINEPREFIX=/tmp/wineprefix
-wine RDP5CL.exe -fAL_7.fasta -nor
+# Run the entire sequence inside xvfb-run (without -nolisten unix)
+xvfb-run -a --server-args="-screen 0 640x480x8" sh -c "
+  set -x
+  mkdir -p /tmp/wineprefix
+  WINEARCH=win32 WINEPREFIX=/tmp/wineprefix wineboot --init
+  mkdir -p '/tmp/wineprefix/drive_c/Program Files/RDP5'
+  cp RDP.ini PairsScores BinProbs '/tmp/wineprefix/drive_c/Program Files/RDP5/'
+  cp /opt/dlls/MSVBVM60.DLL '/tmp/wineprefix/drive_c/windows/system32/'
+  WINEPREFIX=/tmp/wineprefix wine RDP5CL.exe -fAL_7.fasta -nor
+"
 EXIT_CODE=$?
-echo "Wine exit code: $EXIT_CODE"
-
-kill $XVFB_PID
-wait $XVFB_PID 2>/dev/null
+echo "Execution finished with exit code: $EXIT_CODE"
 exit $EXIT_CODE
 """
     
@@ -73,6 +74,11 @@ exit $EXIT_CODE
     print("Running docker command...")
     res = subprocess.run(cmd, capture_output=False)
     print(f"Docker finished with code: {res.returncode}")
+    
+    # Clean up RDP.ini
+    if dest_ini.exists():
+        print(f"Removing temporary config: {dest_ini}")
+        os.remove(dest_ini)
 
 if __name__ == "__main__":
     run_diagnostics()
