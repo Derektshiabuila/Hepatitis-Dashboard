@@ -214,8 +214,7 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
         # Linux / macOS — run through Wine
         wine_exe = None
         
-        # On macOS, check if PlayOnMac optimized wine32on64 is available
-        if platform.system() == "Darwin":
+        if platform.system() == "Darwin" and os.environ.get("FORCE_DOCKER") != "1":
             playonmac_wine = Path("/Applications/PlayOnMac.app/Contents/Resources/unix/wine/bin/wine32on64")
             if playonmac_wine.exists():
                 wine_exe = str(playonmac_wine)
@@ -227,7 +226,7 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                 os.environ["WINEDEBUG"] = "-all"
                 log.info("Using PlayOnMac optimized wine32on64: %s", wine_exe)
 
-        if not wine_exe:
+        if not wine_exe and os.environ.get("FORCE_DOCKER") != "1":
             wine_exe = shutil.which(WINE)
             
         if wine_exe:
@@ -260,6 +259,9 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                     f"cp -rp /opt/wineprefix /tmp/wineprefix && "
                     f"cp RDP.ini /tmp/wineprefix/drive_c/RDP5/RDP.ini && "
                     f"cp {fasta_rel} /tmp/wineprefix/drive_c/RDP5/{fasta_rel} && "
+                    f"WINEPREFIX=/tmp/wineprefix wine regsvr32 /s COMDLG32.OCX && "
+                    f"WINEPREFIX=/tmp/wineprefix wine regsvr32 /s COMCTL32.OCX && "
+                    f"WINEPREFIX=/tmp/wineprefix wine regsvr32 /s THREED32.OCX && "
                     f"cd /tmp/wineprefix/drive_c/RDP5 && "
                     f"WINEPREFIX=/tmp/wineprefix xvfb-run -a --server-args=\"-screen 0 640x480x8\" wine RDP5CL.exe -f{fasta_rel} -nor && "
                     f"cp {fasta_rel}.csv /work/ 2>/dev/null || cp *{fasta_rel}*.csv /work/ 2>/dev/null || true"
