@@ -476,6 +476,7 @@ rule rdp5_recombination:
         rdp5=1
     log:
         "logs/{virus}/rdp5_{genotype}.log"
+    conda: "envs/recombination.yaml"
     shell:
         r"""
         set -euo pipefail
