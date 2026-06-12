@@ -464,20 +464,20 @@ rule genotype_alignment:
             cat "{input.refs}" "/tmp/{params.virus}_{params.genotype}_sequences.fasta" \
                 > "/tmp/{params.virus}_{params.genotype}_combined.fasta"
             mafft --thread {threads} --auto "/tmp/{params.virus}_{params.genotype}_combined.fasta" \
-                > {output.aligned}
+                > "{output.aligned}"
         elif [ -f "{input.refs}" ] && [ -s "{input.refs}" ]; then
             # Only ref sequences exist
             echo "Aligning {params.genotype} with reference sequences only" >&2
             mafft --thread {threads} --auto "{input.refs}" \
-                > {output.aligned}
+                > "{output.aligned}"
         elif [ -s "/tmp/{params.virus}_{params.genotype}_sequences.fasta" ]; then
             # Only sample sequences exist
             echo "Aligning {params.genotype} with sample sequences only" >&2
             mafft --thread {threads} --auto "/tmp/{params.virus}_{params.genotype}_sequences.fasta" \
-                > {output.aligned}
-        else:
+                > "{output.aligned}"
+        else
             # No sequences at all - create empty output
-            echo "No sequences found for genotype {params.genotype}" > {output.aligned}
+            echo "No sequences found for genotype {params.genotype}" > "{output.aligned}"
             echo "Warning: No sequences found for genotype {params.genotype}" >&2
         fi
         

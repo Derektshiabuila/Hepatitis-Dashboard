@@ -418,13 +418,13 @@ print('Found %d samples for genotype %s' % (len(ids), '{params.genotype}'))
 
         if [ -f "$REF" ] && [ -s "$REF" ] && [ -s "$SEQS" ]; then
             cat "$REF" "$SEQS" > "$COMBINED"
-            mafft --thread {threads} --auto "$COMBINED" > {output.aligned}
+            mafft --thread {threads} --auto "$COMBINED" > "{output.aligned}"
         elif [ -f "$REF" ] && [ -s "$REF" ]; then
-            mafft --thread {threads} --auto "$REF" > {output.aligned}
+            mafft --thread {threads} --auto "$REF" > "{output.aligned}"
         elif [ -s "$SEQS" ]; then
-            mafft --thread {threads} --auto "$SEQS" > {output.aligned}
+            mafft --thread {threads} --auto "$SEQS" > "{output.aligned}"
         else
-            printf "" > {output.aligned}
+            printf "" > "{output.aligned}"
             echo "Warning: no sequences found for genotype {params.genotype}" >&2
         fi
 
