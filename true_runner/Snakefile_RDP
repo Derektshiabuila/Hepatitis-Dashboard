@@ -451,39 +451,61 @@ rule genotype_alignment:
                 -f "/tmp/{params.virus}_{params.genotype}_samples.txt" \
                 {input.sequences} \
                 > "/tmp/{params.virus}_{params.genotype}_sequences.fasta"
-        else:
+        else
             # Create empty file if no samples
             > "/tmp/{params.virus}_{params.genotype}_sequences.fasta"
             echo "Warning: No samples found for genotype {params.genotype}" >&2
         fi
         
         # Step 3: Combine with reference sequences and align
-        if [ -f "{input.refs}" ] && [ -s "{input.refs}" ] && [ -s "/tmp/{params.virus}_{params.genotype}_sequences.fasta" ]; then
-            # Both ref and sample sequences exist
-            echo "Aligning {params.genotype} with reference and sample sequences" >&2
-            cat "{input.refs}" "/tmp/{params.virus}_{params.genotype}_sequences.fasta" \
-                > "/tmp/{params.virus}_{params.genotype}_combined.fasta"
-            mafft --thread {threads} --auto "/tmp/{params.virus}_{params.genotype}_combined.fasta" \
-                > "{output.aligned}"
-        elif [ -f "{input.refs}" ] && [ -s "{input.refs}" ]; then
-            # Only ref sequences exist
-            echo "Aligning {params.genotype} with reference sequences only" >&2
-            mafft --thread {threads} --auto "{input.refs}" \
-                > "{output.aligned}"
-        elif [ -s "/tmp/{params.virus}_{params.genotype}_sequences.fasta" ]; then
-            # Only sample sequences exist
-            echo "Aligning {params.genotype} with sample sequences only" >&2
-            mafft --thread {threads} --auto "/tmp/{params.virus}_{params.genotype}_sequences.fasta" \
-                > "{output.aligned}"
+        GENO_CLEAN=$(echo "{params.genotype}" | tr ' ' '_')
+        REF="{input.refs}"
+        SEQS="/tmp/{params.virus}_${{GENO_CLEAN}}_sequences.fasta"
+        COMBINED="/tmp/{params.virus}_${{GENO_CLEAN}}_combined.fasta"
+
+        if [ -s "/tmp/{params.virus}_{params.genotype}_sequences.fasta" ]; then
+            cp "/tmp/{params.virus}_{params.genotype}_sequences.fasta" "$SEQS"
+        fi
+
+        HAS_REF=0
+        if [ -f "$REF" ] && [ -s "$REF" ]; then
+            HAS_REF=1
+        fi
+
+        HAS_SEQS=0
+        if [ -s "$SEQS" ]; then
+            HAS_SEQS=1
+        fi
+
+        ALIGN_TARGET=""
+        if [ "$HAS_REF" -eq 1 ] && [ "$HAS_SEQS" -eq 1 ]; then
+            cat "$REF" "$SEQS" > "$COMBINED"
+            ALIGN_TARGET="$COMBINED"
+        elif [ "$HAS_REF" -eq 1 ]; then
+            ALIGN_TARGET="$REF"
+        elif [ "$HAS_SEQS" -eq 1 ]; then
+            ALIGN_TARGET="$SEQS"
+        fi
+
+        if [ -n "$ALIGN_TARGET" ] && [ -s "$ALIGN_TARGET" ]; then
+            n_seqs=$(grep -c "^>" "$ALIGN_TARGET" || true)
+            if [ "$n_seqs" -ge 2 ]; then
+                echo "Aligning $n_seqs sequences for genotype {params.genotype} using MAFFT..." >&2
+                mafft --thread {threads} --auto "$ALIGN_TARGET" > "{output.aligned}"
+            elif [ "$n_seqs" -eq 1 ]; then
+                echo "Only 1 sequence found for genotype {params.genotype}. Copying directly without alignment." >&2
+                cat "$ALIGN_TARGET" > "{output.aligned}"
+            else
+                printf "" > "{output.aligned}"
+            fi
         else
-            # No sequences at all - create empty output
-            echo "No sequences found for genotype {params.genotype}" > "{output.aligned}"
+            printf "" > "{output.aligned}"
             echo "Warning: No sequences found for genotype {params.genotype}" >&2
         fi
         
         # Cleanup
-        rm -f "/tmp/{params.virus}_{params.genotype}_*.fasta" \
-              "/tmp/{params.virus}_{params.genotype}_samples.txt" 2>/dev/null || true
+        rm -f "/tmp/{params.virus}_${{GENO_CLEAN}}_"*.fasta \
+              "/tmp/{params.virus}_{params.genotype}_"* 2>/dev/null || true
         """
 
 # Rule to generate all genotype alignments for a virus

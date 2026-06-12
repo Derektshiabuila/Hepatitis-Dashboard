@@ -419,13 +419,37 @@ print('Found %d samples for genotype %s' % (len(ids), '{params.genotype}'))
         SEQS="/tmp/{params.virus}_${{GENO_CLEAN}}_seqs.fasta"
         COMBINED="/tmp/{params.virus}_${{GENO_CLEAN}}_combined.fasta"
 
-        if [ -f "$REF" ] && [ -s "$REF" ] && [ -s "$SEQS" ]; then
+        HAS_REF=0
+        if [ -f "$REF" ] && [ -s "$REF" ]; then
+            HAS_REF=1
+        fi
+
+        HAS_SEQS=0
+        if [ -s "$SEQS" ]; then
+            HAS_SEQS=1
+        fi
+
+        ALIGN_TARGET=""
+        if [ "$HAS_REF" -eq 1 ] && [ "$HAS_SEQS" -eq 1 ]; then
             cat "$REF" "$SEQS" > "$COMBINED"
-            mafft --thread {threads} --auto "$COMBINED" > "{output.aligned}"
-        elif [ -f "$REF" ] && [ -s "$REF" ]; then
-            mafft --thread {threads} --auto "$REF" > "{output.aligned}"
-        elif [ -s "$SEQS" ]; then
-            mafft --thread {threads} --auto "$SEQS" > "{output.aligned}"
+            ALIGN_TARGET="$COMBINED"
+        elif [ "$HAS_REF" -eq 1 ]; then
+            ALIGN_TARGET="$REF"
+        elif [ "$HAS_SEQS" -eq 1 ]; then
+            ALIGN_TARGET="$SEQS"
+        fi
+
+        if [ -n "$ALIGN_TARGET" ] && [ -s "$ALIGN_TARGET" ]; then
+            n_seqs=$(grep -c "^>" "$ALIGN_TARGET" || true)
+            if [ "$n_seqs" -ge 2 ]; then
+                echo "Aligning $n_seqs sequences for genotype {params.genotype} using MAFFT..." >&2
+                mafft --thread {threads} --auto "$ALIGN_TARGET" > "{output.aligned}"
+            elif [ "$n_seqs" -eq 1 ]; then
+                echo "Only 1 sequence found for genotype {params.genotype}. Copying directly without alignment." >&2
+                cat "$ALIGN_TARGET" > "{output.aligned}"
+            else
+                printf "" > "{output.aligned}"
+            fi
         else
             printf "" > "{output.aligned}"
             echo "Warning: no sequences found for genotype {params.genotype}" >&2
