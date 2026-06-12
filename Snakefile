@@ -378,8 +378,8 @@ rule genotype_alignment:
     input:
         resistance="results/{virus}/final_resistance.tsv",
         sequences="results/{virus}/{virus}_sequences.fasta",
-        refs=lambda w: (f"refs/{w.virus}/{w.genotype}.fasta"
-                        if os.path.exists(f"refs/{w.virus}/{w.genotype}.fasta")
+        refs=lambda w: (f"refs/{w.virus}/ref_msa.fasta"
+                        if os.path.exists(f"refs/{w.virus}/ref_msa.fasta")
                         else [])
     output:
         aligned="results/{virus}/alignments/{genotype}_aligned.fasta"
