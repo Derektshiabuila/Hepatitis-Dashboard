@@ -246,7 +246,8 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                 "-e", "HOME=/tmp",
                 "-u", f"{uid}:{gid}",
                 image_name,
-                "xvfb-run", "-a", "-s", "-nolisten unix", "sh", "-c", (
+                "xvfb-run", "-a", "--server-args=-screen 0 640x480x8 -nolisten unix", "sh", "-c", (
+                    f"set -x && "
                     f"mkdir -p /tmp/wineprefix && "
                     f"WINEARCH=win32 WINEPREFIX=/tmp/wineprefix wineboot --init && "
                     f"mkdir -p '/tmp/wineprefix/drive_c/Program Files/RDP5' && "
