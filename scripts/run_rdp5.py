@@ -161,7 +161,7 @@ RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 ENV WINEPREFIX=/opt/wineprefix
 ENV WINEARCH=win32
 ENV WINEDEBUG=-all
-ENV WINEDLLOVERRIDES="mscoree,mshtml=d"
+ENV WINEDLLOVERRIDES="mscoree,mshtml,winhttp=d"
 
 # Initialize prefix and install RDP5
 RUN xvfb-run -a --server-args="-screen 0 640x480x8" wineboot --init && \\
@@ -250,7 +250,7 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                 "-v", f"{rdp5_dir}:/work",
                 "-w", "/work",
                 "-e", "WINEDEBUG=+err",
-                "-e", "WINEDLLOVERRIDES=mscoree,mshtml=d",
+                "-e", "WINEDLLOVERRIDES=mscoree,mshtml,winhttp=d",
                 "-e", "HOME=/tmp",
                 "-u", f"{uid}:{gid}",
                 image_name,

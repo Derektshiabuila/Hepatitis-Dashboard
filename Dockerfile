@@ -54,7 +54,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Initialize Wine in headless mode
 ENV WINEPREFIX=/root/.wine
 ENV WINEDEBUG=-all
-ENV WINEDLLOVERRIDES="mscoree,mshtml=d"
+ENV WINEDLLOVERRIDES="mscoree,mshtml,winhttp=d"
 RUN wineboot --init
 
 # Attempt to download and silent-install RDP5 inside Wine
