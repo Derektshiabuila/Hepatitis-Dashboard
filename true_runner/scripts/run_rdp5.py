@@ -253,7 +253,7 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                     f"mkdir -p '/tmp/wineprefix/drive_c/Program Files/RDP5' && "
                     f"cp RDP.ini PairsScores BinProbs '/tmp/wineprefix/drive_c/Program Files/RDP5/' && "
                     f"cp /opt/dlls/MSVBVM60.DLL /tmp/wineprefix/drive_c/windows/system32/ && "
-                    f"WINEPREFIX=/tmp/wineprefix xvfb-run -a --server-args=\"-screen 0 640x480x8 -nolisten unix\" wine {exe_rel} -f{fasta_rel} -nor"
+                    f"WINEPREFIX=/tmp/wineprefix xvfb-run -a --server-args=\"-screen 0 640x480x8\" wine {exe_rel} -f{fasta_rel} -nor"
                 )
             ]
             
