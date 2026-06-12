@@ -393,6 +393,8 @@ rule genotype_alignment:
         set -euo pipefail
         mkdir -p results/{wildcards.virus}/alignments
 
+        GENO_CLEAN=$(echo "{params.genotype}" | tr ' ' '_')
+
         python -c "
 import pandas as pd, sys
 df = pd.read_csv('{input.resistance}', sep='\t', dtype=str)
@@ -401,21 +403,21 @@ sample_col   = next((c for c in ['sample','Sample','sequence_id','accession','se
 if not genotype_col or not sample_col:
     print('ERROR: missing genotype or sample column', file=sys.stderr); sys.exit(1)
 ids = df[df[genotype_col].astype(str).str.strip() == '{params.genotype}'][sample_col].dropna().astype(str).str.strip().tolist()
-open('/tmp/{params.virus}_{params.genotype}_samples.txt', 'w').write('\n'.join(ids) + '\n')
+open('/tmp/{params.virus}_' + sys.argv[1] + '_samples.txt', 'w').write('\n'.join(ids) + '\n')
 print('Found %d samples for genotype %s' % (len(ids), '{params.genotype}'))
-"
+" "$GENO_CLEAN"
 
-        if [ -s "/tmp/{params.virus}_{params.genotype}_samples.txt" ]; then
-            seqkit grep -f "/tmp/{params.virus}_{params.genotype}_samples.txt" \
-                {input.sequences} > "/tmp/{params.virus}_{params.genotype}_seqs.fasta"
+        if [ -s "/tmp/{params.virus}_${{GENO_CLEAN}}_samples.txt" ]; then
+            seqkit grep -f "/tmp/{params.virus}_${{GENO_CLEAN}}_samples.txt" \
+                {input.sequences} > "/tmp/{params.virus}_${{GENO_CLEAN}}_seqs.fasta"
         else
-            touch "/tmp/{params.virus}_{params.genotype}_seqs.fasta"
+            touch "/tmp/{params.virus}_${{GENO_CLEAN}}_seqs.fasta"
             echo "Warning: no samples for genotype {params.genotype}" >&2
         fi
 
         REF="{input.refs}"
-        SEQS="/tmp/{params.virus}_{params.genotype}_seqs.fasta"
-        COMBINED="/tmp/{params.virus}_{params.genotype}_combined.fasta"
+        SEQS="/tmp/{params.virus}_${{GENO_CLEAN}}_seqs.fasta"
+        COMBINED="/tmp/{params.virus}_${{GENO_CLEAN}}_combined.fasta"
 
         if [ -f "$REF" ] && [ -s "$REF" ] && [ -s "$SEQS" ]; then
             cat "$REF" "$SEQS" > "$COMBINED"
@@ -429,8 +431,8 @@ print('Found %d samples for genotype %s' % (len(ids), '{params.genotype}'))
             echo "Warning: no sequences found for genotype {params.genotype}" >&2
         fi
 
-        rm -f "/tmp/{params.virus}_{params.genotype}_"*.fasta \
-              "/tmp/{params.virus}_{params.genotype}_samples.txt" 2>/dev/null || true
+        rm -f "/tmp/{params.virus}_${{GENO_CLEAN}}_"*.fasta \
+              "/tmp/{params.virus}_${{GENO_CLEAN}}_samples.txt" 2>/dev/null || true
         """
 
 
