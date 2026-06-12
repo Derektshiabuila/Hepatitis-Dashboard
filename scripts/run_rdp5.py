@@ -143,25 +143,34 @@ def _on_windows() -> bool:
 
 
 def _ensure_local_wine_image() -> str:
-    image_name = "local-wine-vb6-xvfb:v3"
+    image_name = "local-wine-vb6-xvfb:v4"
     # Check if image exists
     res = subprocess.run(["docker", "images", "-q", image_name], capture_output=True, text=True)
     if res.stdout.strip():
         return image_name
     
-    log.info("Building local-wine-vb6-xvfb:v3 Docker image (this runs once and is very lightweight)...")
+    log.info("Building local-wine-vb6-xvfb:v4 Docker image (this runs once and contains full RDP5 installation)...")
     dockerfile_content = """FROM debian:stable-slim
 RUN dpkg --add-architecture i386 && \\
     apt-get update && \\
-    apt-get install -y wine wine32 cabextract curl xvfb xauth && \\
+    apt-get install -y wine wine32 cabextract curl xvfb xauth procps && \\
     rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
-RUN curl -fSL -o /tmp/xpsp3.exe http://www.download.windowsupdate.com/msdownload/update/software/dflt/2008/04/windowsxp-kb936929-sp3-x86-enu_c81472f7eeea2eca421e116cd4c03e2300ebfde4.exe && \\
-    cabextract -d /tmp -L -F "*msvbvm60.dl*" /tmp/xpsp3.exe && \\
-    find /tmp -name "*msvbvm60.dl*" -exec cabextract -d /tmp -L {} \\; && \\
-    mkdir -p /opt/dlls && \\
-    find /tmp -name "msvbvm60.dll" -exec cp {} /opt/dlls/MSVBVM60.DLL \\; && \\
-    rm -rf /tmp/xpsp3.exe /tmp/msvbvm60.dl_ /tmp/i386 /tmp/msvbvm60.dll
+
+# Setup template prefix
+ENV WINEPREFIX=/opt/wineprefix
+ENV WINEARCH=win32
+ENV WINEDEBUG=-all
+ENV WINEDLLOVERRIDES="mscoree,mshtml=d"
+
+# Initialize prefix and install RDP5
+RUN xvfb-run -a --server-args="-screen 0 640x480x8" wineboot --init && \\
+    curl -fSL -o /tmp/RDP5_Setup.exe https://web.cbio.uct.ac.za/~darren/RDP5.84Setup.exe && \\
+    xvfb-run -a --server-args="-screen 0 640x480x8" wine /tmp/RDP5_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /DIR="C:\\\\RDP5" && \\
+    rm -f /tmp/RDP5_Setup.exe
+
+# Make readable/writable for non-root users
+RUN chmod -R 777 /opt/wineprefix
 """
     # Create the tmp directory inside the project root (which starts with /home/...)
     project_root = Path(__file__).parent.parent.resolve()
@@ -178,11 +187,11 @@ RUN curl -fSL -o /tmp/xpsp3.exe http://www.download.windowsupdate.com/msdownload
                 text=True
             )
             if build_res.returncode != 0:
-                log.error("Failed to build local-wine-vb6-xvfb:v3 image: %s", build_res.stderr)
-                raise RuntimeError(f"Failed to build local-wine-vb6-xvfb:v3 image: {build_res.stderr}")
+                log.error("Failed to build local-wine-vb6-xvfb:v4 image: %s", build_res.stderr)
+                raise RuntimeError(f"Failed to build local-wine-vb6-xvfb:v4 image: {build_res.stderr}")
     finally:
         shutil.rmtree(tmp_base, ignore_errors=True)
-    log.info("Successfully built local-wine-vb6-xvfb:v3 Docker image.")
+    log.info("Successfully built local-wine-vb6-xvfb:v4 Docker image.")
     return image_name
 
 
@@ -248,12 +257,12 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                 image_name,
                 "sh", "-c", (
                     f"set -x && "
-                    f"mkdir -p /tmp/wineprefix && "
-                    f"WINEARCH=win32 WINEPREFIX=/tmp/wineprefix wineboot --init && "
-                    f"mkdir -p '/tmp/wineprefix/drive_c/Program Files/RDP5' && "
-                    f"cp RDP.ini PairsScores BinProbs '/tmp/wineprefix/drive_c/Program Files/RDP5/' && "
-                    f"cp /opt/dlls/MSVBVM60.DLL /tmp/wineprefix/drive_c/windows/system32/ && "
-                    f"WINEPREFIX=/tmp/wineprefix xvfb-run -a --server-args=\"-screen 0 640x480x8\" wine {exe_rel} -f{fasta_rel} -nor"
+                    f"cp -rp /opt/wineprefix /tmp/wineprefix && "
+                    f"cp RDP.ini /tmp/wineprefix/drive_c/RDP5/RDP.ini && "
+                    f"cp {fasta_rel} /tmp/wineprefix/drive_c/RDP5/{fasta_rel} && "
+                    f"cd /tmp/wineprefix/drive_c/RDP5 && "
+                    f"WINEPREFIX=/tmp/wineprefix xvfb-run -a --server-args=\"-screen 0 640x480x8\" wine RDP5CL.exe -f{fasta_rel} -nor && "
+                    f"cp {fasta_rel}.csv /work/ 2>/dev/null || cp *{fasta_rel}*.csv /work/ 2>/dev/null || true"
                 )
             ]
             
