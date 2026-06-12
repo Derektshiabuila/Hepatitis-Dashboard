@@ -532,9 +532,13 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
             text=True,
             timeout=RDP5_TIMEOUT,
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
         if work_fasta.exists():
             work_fasta.unlink()
+        if e.stdout:
+            log.error("RDP5 STDOUT before timeout:\n%s", e.stdout)
+        if e.stderr:
+            log.error("RDP5 STDERR before timeout:\n%s", e.stderr)
         raise RuntimeError(
             f"RDP5 timed out after {RDP5_TIMEOUT} s on {label}.\n"
             f"Increase RDP5_TIMEOUT (current: {RDP5_TIMEOUT})."
