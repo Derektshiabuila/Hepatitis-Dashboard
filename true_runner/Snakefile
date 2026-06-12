@@ -453,21 +453,21 @@ rule rdp5_recombination:
     shell:
         r"""
         set -euo pipefail
-        mkdir -p {params.outdir} logs/{wildcards.virus}
+        mkdir -p "{params.outdir}" "logs/{wildcards.virus}"
 
-        n_seqs=$(grep -c "^>" {input.aligned} || true)
+        n_seqs=$(grep -c "^>" "{input.aligned}" || true)
         if [ "$n_seqs" -lt 4 ]; then
-            echo "$(date) Skipping {params.genotype}: only $n_seqs sequence(s) (need ≥4)" | tee -a {log}
-            printf "sequence_id\tis_recombinant\tbreakpoint_start\tbreakpoint_end\tp_value\tmethods\tparent_1\tparent_2\n" > {output.tsv}
+            echo "$(date) Skipping {params.genotype}: only $n_seqs sequence(s) (need ≥4)" | tee -a "{log}"
+            printf "sequence_id\tis_recombinant\tbreakpoint_start\tbreakpoint_end\tp_value\tmethods\tparent_1\tparent_2\n" > "{output.tsv}"
             exit 0
         fi
 
-        echo "$(date) Running RDP5 on {params.genotype} ($n_seqs sequences)" | tee -a {log}
+        echo "$(date) Running RDP5 on {params.genotype} ($n_seqs sequences)" | tee -a "{log}"
         python scripts/run_rdp5.py \
-            --fasta    {input.aligned} \
-            --virus    {params.virus} \
-            --outdir   {params.outdir} \
-            --genotype {params.genotype} >> {log} 2>&1
+            --fasta    "{input.aligned}" \
+            --virus    "{params.virus}" \
+            --outdir   "{params.outdir}" \
+            --genotype "{params.genotype}" >> "{log}" 2>&1
         """
 
 
