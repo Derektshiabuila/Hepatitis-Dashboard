@@ -242,6 +242,7 @@ def _build_cmd(rdp5_exe: Path, fasta_path: Path, out_prefix: Path) -> list[str]:
                 "-v", f"{rdp5_dir}:/work",
                 "-w", "/work",
                 "-e", "WINEDEBUG=+err",
+                "-e", "WINEDLLOVERRIDES=mscoree,mshtml=d",
                 "-e", "HOME=/tmp",
                 "-u", f"{uid}:{gid}",
                 image_name,
