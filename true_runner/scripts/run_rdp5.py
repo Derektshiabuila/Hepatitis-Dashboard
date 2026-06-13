@@ -471,7 +471,7 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
 
     # Cleanup intermediate 3seq files
     for p in outdir.glob(f"{run_id}.3s.*"):
-        if p.exists() and p.name != f"{run_id}.3s.rec.csv":
+        if p.exists() and p.name not in [f"{run_id}.3s.rec.csv", f"{run_id}.3s.longRec"]:
             try:
                 p.unlink()
             except Exception as e:
