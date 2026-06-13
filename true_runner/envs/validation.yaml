@@ -11,4 +11,5 @@ dependencies:
   - requests
   - scipy
   - h5py
+  - iqtree
   - pip
