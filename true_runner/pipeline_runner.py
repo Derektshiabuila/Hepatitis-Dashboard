@@ -1231,7 +1231,8 @@ def _assemble_results(sequences, virus_lc, genotype_map, recomb_results,
         mutation_annotations = []
         for mut in muts.get("mutations", []):
             # Try to extract a genomic position from the mutation label
-            match = re.search(r"(\d+)", mut)
+            mut_clean = mut.split("_")[-1] if "_" in mut else mut
+            match = re.search(r"(\d+)", mut_clean)
             pos   = int(match.group(1)) if match else 0
             
             offset = 0
