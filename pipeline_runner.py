@@ -1071,8 +1071,10 @@ def _run_recombination(user_fasta: Path, virus: str, jdir: Path) -> dict:
                     
                     if p1 and p2 and start > 0 and end > 0:
                         # 1. Length check: is it in the longRec file?
-                        longrec_path = rdp_out / "run_sequences.3s.longRec"
-                        long_rec_set = validate_recombination.load_long_rec_candidates(longrec_path)
+                        longrec_path = next(rdp_out.glob("*.3s.longRec"), None)
+                        long_rec_set = set()
+                        if longrec_path and longrec_path.exists():
+                            long_rec_set = validate_recombination.load_long_rec_candidates(longrec_path)
                         if sid in long_rec_set:
                             passed_len = True
                         
