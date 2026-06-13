@@ -344,6 +344,8 @@ def main():
     scratch_dir = Path("scratch/recomb_val")
     scratch_dir.mkdir(parents=True, exist_ok=True)
     
+    warned_missing_paths = set()
+    
     for cand in candidates:
         candidate_id = cand["sequence_id"]
         # Find genotype of this sequence
@@ -365,6 +367,12 @@ def main():
             
         # ── Step 1: LongRec Filter ─────────────────────────────────────────
         longrec_path = base_dir / "recombination" / genotype / f"run_{genotype}.3s.longRec"
+        if not longrec_path.exists():
+            if longrec_path not in warned_missing_paths:
+                log.warning("LongRec file %s not found. Re-run with '-R rdp5_recombination' to generate/preserve it.", longrec_path)
+                warned_missing_paths.add(longrec_path)
+            continue
+            
         long_rec_set = load_long_rec_candidates(longrec_path)
         
         if candidate_id not in long_rec_set:
