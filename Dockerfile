@@ -80,4 +80,4 @@ ENV RDP5_WINE=wine
 EXPOSE 8051
 
 # Start the dashboard using Gunicorn
-CMD ["gunicorn", "Full_Hepatitis_page:server", "--bind", "0.0.0.0:8051", "--workers", "2", "--timeout", "120"]
+CMD ["gunicorn", "Full_Hepatitis_page:server", "--bind", "0.0.0.0:8051", "--workers", "2", "--threads", "4", "--worker-class", "gthread", "--timeout", "120"]

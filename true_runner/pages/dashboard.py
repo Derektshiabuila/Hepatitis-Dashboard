@@ -23,6 +23,14 @@ register_page(__name__, path="/dashboard", name="Dashboard")
 
 # Import data loading functions
 from data_loader import load_and_preprocess_data
+try:
+    from Full_Hepatitis_page import cache
+except ImportError:
+    class DummyCache:
+        def memoize(self, *args, **kwargs):
+            return lambda f: f
+    cache = DummyCache()
+
 from user_sequence_analysis import (
     USER_SEQ_STORES,
     user_seq_tab_button,
@@ -4520,6 +4528,7 @@ def render_genotype_bar(filtered_json, virus, display_mode):
     State("continent-dropdown", "value"),
     State("country-dropdown", "value"),
 )
+@cache.memoize(timeout=86400)
 def render_map(filtered_json, gap_json, ihme_json, virus, display_mode, map_mode, 
                ihme_metric, regions, countries):
     selected_virus = (virus or "HBV")

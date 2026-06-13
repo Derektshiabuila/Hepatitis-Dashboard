@@ -23,6 +23,15 @@ app = dash.Dash(
     suppress_callback_exceptions=True,
 )
 
+# Initialize Flask-Caching
+from flask_caching import Cache
+cache = Cache(app.server, config={
+    'CACHE_TYPE': 'FileSystemCache',
+    'CACHE_DIR': 'results/cache-directory',
+    'CACHE_DEFAULT_TIMEOUT': 86400  # 24 hours
+})
+
+
 def navbar():
     reg = {p["name"]: p["path"] for p in dash.page_registry.values()}
     order = ["Dashboard", "About", "Resources", "Contact"]

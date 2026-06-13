@@ -4,8 +4,8 @@ services:
   dashboard:
     build: .
     container_name: hepatitis-dashboard
-    ports:
-      - "80:8051"  # Maps port 80 (HTTP) on the host to port 8051 in the container
+    expose:
+      - "8051"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock  # Mounts the Docker socket for Docker-out-of-Docker sibling containers (GLUE)
       - ./true_runner/results:/app/results                      # Maps preprocessed metadata and alignments from host
@@ -15,7 +15,26 @@ services:
       - HEP_JOBS_DIR=/tmp/hep_dash_jobs
       - HEP_PROJECT_ROOT=/app
       - HEP_HOST_PROJECT_ROOT=${PWD}
+    networks:
+      - hep-net
+    restart: always
+
+  nginx:
+    image: nginx:alpine
+    container_name: hepatitis-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - dashboard
+    networks:
+      - hep-net
     restart: always
 
 volumes:
   jobs_data:
+
+networks:
+  hep-net:
+    driver: bridge
