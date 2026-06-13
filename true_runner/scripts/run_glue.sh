@@ -218,9 +218,16 @@ if [ -n "${HEP_HOST_PROJECT_ROOT:-}" ]; then
     fi
 fi
 
+# Get the network of the MySQL container dynamically to ensure sibling container can link to it
+MYSQL_NET=$(docker inspect "$MYSQL_CONTAINER" --format='{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null | head -n 1 || true)
+if [ -z "$MYSQL_NET" ]; then
+    MYSQL_NET="bridge"
+fi
+
 # Run GLUE using Docker, linked to the virus-specific MySQL container
 docker run --rm \
     --platform linux/amd64 \
+    --network "$MYSQL_NET" \
     --link "${MYSQL_CONTAINER}:gluetools-mysql" \
     -v "$HOST_OUTPUT_DIR:/work" \
     cvrbioinformatics/gluetools:latest \
