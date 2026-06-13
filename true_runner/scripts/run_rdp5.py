@@ -230,7 +230,55 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
     n_seqs = _count_sequences(fasta_path)
     seq_ids = _read_sequence_ids(fasta_path)
 
-    if n_seqs < RDP5_MIN_SEQS:
+    # Parse and split into parents (references starting with ref_) and children (query seqs)
+    parents = []
+    children = []
+    
+    current_header = None
+    current_seq = []
+    
+    with fasta_path.open() as fh:
+        for line in fh:
+            if line.startswith(">"):
+                if current_header:
+                    seq_entry = (current_header, "".join(current_seq))
+                    if current_header[1:].startswith("ref_"):
+                        parents.append(seq_entry)
+                    else:
+                        children.append(seq_entry)
+                current_header = line.strip()
+                current_seq = []
+            else:
+                current_seq.append(line.strip())
+        if current_header:
+            seq_entry = (current_header, "".join(current_seq))
+            if current_header[1:].startswith("ref_"):
+                parents.append(seq_entry)
+            else:
+                children.append(seq_entry)
+
+    run_id = f"run_{label}"
+    parents_path = outdir / f"{run_id}_parents.fasta"
+    children_path = outdir / f"{run_id}_children.fasta"
+
+    use_two_file_mode = len(parents) > 0 and len(children) > 0
+
+    if use_two_file_mode:
+        target_seq_ids = [c[0][1:].split()[0].strip() for c in children]
+        # Write parents file
+        with parents_path.open("w") as fh:
+            for h, s in parents:
+                fh.write(f"{h}\n{s}\n")
+        # Write children file
+        with children_path.open("w") as fh:
+            for h, s in children:
+                fh.write(f"{h}\n{s}\n")
+        log.info("Running in two-file mode: %d parents, %d children", len(parents), len(children))
+    else:
+        target_seq_ids = seq_ids
+        log.info("Running in single-file mode: %d sequences", n_seqs)
+
+    if not use_two_file_mode and n_seqs < RDP5_MIN_SEQS:
         log.warning(
             "%s: only %d sequence(s) — 3seq needs at least %d. "
             "Writing non-recombinant TSV and skipping.",
@@ -242,7 +290,7 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
                 "breakpoint_start": 0, "breakpoint_end": 0,
                 "p_value": "", "methods": "", "parent_1": "", "parent_2": "",
             }
-            for sid in seq_ids
+            for sid in target_seq_ids
         ]
         out_tsv = outdir / "recombinants.tsv"
         _write_tsv(rows, out_tsv)
@@ -266,7 +314,6 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
 
     log.info("Using 3seq executable: %s", threeseq_exe)
 
-    run_id = f"run_{label}"
     # Clean up old run files
     for p in outdir.glob(f"{run_id}.3s.*"):
         try:
@@ -281,11 +328,20 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
         ptable_path = Path.cwd() / "PVT.3SEQ.2017.700"
 
     # 3seq command
-    cmd = [
-        str(threeseq_exe),
-        "-full",
-        str(fasta_path.resolve()),
-    ]
+    if use_two_file_mode:
+        cmd = [
+            str(threeseq_exe),
+            "-full",
+            str(parents_path.resolve()),
+            str(children_path.resolve()),
+        ]
+    else:
+        cmd = [
+            str(threeseq_exe),
+            "-full",
+            str(fasta_path.resolve()),
+        ]
+
     if ptable_path.exists():
         cmd.extend(["-ptable", str(ptable_path.resolve())])
         log.info("Using P-value table: %s", ptable_path)
@@ -333,16 +389,28 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
                 "breakpoint_start": 0, "breakpoint_end": 0,
                 "p_value": "", "methods": "", "parent_1": "", "parent_2": "",
             }
-            for sid in seq_ids
+            for sid in target_seq_ids
         ]
         out_tsv = outdir / "recombinants.tsv"
         _write_tsv(rows, out_tsv)
         return out_tsv
 
     # Parse and write normalised TSV
-    rows = _parse_3seq_csv(csv_src, seq_ids)
+    rows = _parse_3seq_csv(csv_src, target_seq_ids)
     out_tsv = outdir / "recombinants.tsv"
     _write_tsv(rows, out_tsv)
+
+    # Cleanup temporary split files
+    if parents_path.exists():
+        try:
+            parents_path.unlink()
+        except Exception:
+            pass
+    if children_path.exists():
+        try:
+            children_path.unlink()
+        except Exception:
+            pass
 
     # Cleanup intermediate 3seq files
     for p in outdir.glob(f"{run_id}.3s.*"):
