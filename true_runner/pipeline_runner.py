@@ -705,7 +705,7 @@ def _build_subtree(user_fasta: Path, placements: list[dict],
     try:
         _run(
             [IQTREE, "-s", str(aligned), "-m", "GTR+G",
-             "--prefix", str(prefix), "-nt", "AUTO", "--redo", "-fast"],
+             "--prefix", str(prefix), "-nt", "2", "--redo", "-fast"],
             cwd=str(jdir), label="IQ-TREE2 subtree", timeout=900,
         )
         treefile = prefix.with_suffix(".treefile")
