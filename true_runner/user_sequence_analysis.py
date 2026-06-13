@@ -386,7 +386,7 @@ def user_seq_tab_content():
                                         dbc.Button(
                                             [
                                                 html.I(className="bi bi-shuffle me-2"),
-                                                "Run Recombination Analysis (RDP5)"
+                                                "Run Recombination Analysis (3Seq)"
                                             ],
                                             id="useq-btn-run-recombination-inline",
                                             color="primary",
@@ -1010,7 +1010,7 @@ def render_results(results):
         recombination_panel = dbc.Alert(
             [
                 html.I(className="bi bi-info-circle-fill me-2"),
-                "Recombination analysis (RDP5) was not run for this job."
+                "Recombination analysis (3Seq) was not run for this job."
             ],
             color="info", className="mb-0"
         )
@@ -1040,7 +1040,7 @@ def render_results(results):
             recombination_panel = html.Div([
                 dbc.Alert(
                     [html.I(className="bi bi-exclamation-triangle-fill me-2"),
-                     f"{len(recombinants)} recombinant sequence(s) detected (RDP5)."],
+                     f"{len(recombinants)} recombinant sequence(s) detected (3Seq)."],
                     color="warning", className="mb-2",
                 ),
                 dbc.ListGroup(rec_items, flush=True),
@@ -1048,7 +1048,7 @@ def render_results(results):
         else:
             recombination_panel = dbc.Alert(
                 [html.I(className="bi bi-check-circle-fill me-2"),
-                 "No recombinants detected by RDP5."],
+                 "No recombinants detected by 3Seq."],
                 color="success",
             )
 
