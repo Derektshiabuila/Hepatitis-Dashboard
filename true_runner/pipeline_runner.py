@@ -1000,46 +1000,132 @@ def _parse_user_glue_xml(xml_path: Path, virus: str) -> dict:
 
 def _run_recombination(user_fasta: Path, virus: str, jdir: Path) -> dict:
     """
-    Run the RDP5 recombination analysis.
-
-    RDP5 is a Windows GUI tool; the standard approach is to invoke it via
-    Wine or call a wrapper script.  Provide a script at:
-        scripts/run_rdp5.py  (or .sh)
-    that accepts: --fasta <path> --virus <virus> --outdir <dir>
-    and writes:   <outdir>/recombinants.tsv
-        Columns: sequence_id, is_recombinant, breakpoint_start, breakpoint_end, p_value
-
-    If the wrapper is absent this step is skipped gracefully.
-
-    Returns { seq_id: { "is_recombinant": bool, "breakpoints": [[s,e], ...] } }
+    Run 3seq on user sequence(s) and perform validation steps (OpenRDP and regional trees).
+    Classifies results into "high_confidence", "needs_review", or "none" (discarded).
     """
     wrapper = PROJECT_ROOT / "scripts" / "run_rdp5.py"
     rdp_out = jdir / "rdp5_out"
     rdp_out.mkdir(exist_ok=True)
 
     if not wrapper.exists():
-        logger.warning(
-            "RDP5 wrapper not found at %s — recombination step skipped.\n"
-            "Create scripts/run_rdp5.py that accepts:\n"
-            "  --fasta <path> --virus <virus> --outdir <dir>\n"
-            "and writes: <outdir>/recombinants.tsv",
-            wrapper,
-        )
+        logger.warning("3seq wrapper not found at %s — recombination step skipped.", wrapper)
         return {}
 
     try:
+        # Run 3seq
         _run(
             ["python", str(wrapper),
              "--fasta",  str(user_fasta),
              "--virus",  virus,
              "--outdir", str(rdp_out)],
             cwd=str(PROJECT_ROOT),
-            label="RDP5",
+            label="3seq",
             timeout=1800,
         )
-        return _parse_recombinants_tsv(rdp_out / "recombinants.tsv")
+        
+        tsv_path = rdp_out / "recombinants.tsv"
+        if not tsv_path.exists():
+            return {}
+            
+        # Import validation script functions dynamically
+        import sys
+        sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+        import validate_recombination
+        
+        aligned_path = jdir / "user_aligned.fasta"
+        if not aligned_path.exists():
+            aligned_path = user_fasta
+            
+        results = {}
+        import csv
+        with tsv_path.open() as fh:
+            reader = csv.DictReader(fh, delimiter="\t")
+            for row in reader:
+                sid = row.get("sequence_id", "?")
+                is_r = row.get("is_recombinant", "false").lower() in ("true", "1", "yes")
+                p1 = row.get("parent_1")
+                p2 = row.get("parent_2")
+                bp_s = row.get("breakpoint_start")
+                bp_e = row.get("breakpoint_end")
+                
+                results[sid] = {
+                    "is_recombinant": False,
+                    "validation_status": "none",
+                    "breakpoints": []
+                }
+                
+                if is_r:
+                    # Parse breakpoints
+                    start, end = 0, 0
+                    try:
+                        start = int(bp_s)
+                        end = int(bp_e)
+                    except (ValueError, TypeError):
+                        pass
+                        
+                    # Run validation checks
+                    passed_len = False
+                    passed_dist = False
+                    passed_openrdp = False
+                    passed_tree = False
+                    
+                    if p1 and p2 and start > 0 and end > 0:
+                        # 1. Length check: is it in the longRec file?
+                        longrec_path = rdp_out / "run_sequences.3s.longRec"
+                        long_rec_set = validate_recombination.load_long_rec_candidates(longrec_path)
+                        if sid in long_rec_set:
+                            passed_len = True
+                        
+                        # 2. Distance check: parent switching
+                        extracted_seqs = validate_recombination.get_alignment_sequences(aligned_path, [sid, p1, p2])
+                        if sid in extracted_seqs and p1 in extracted_seqs and p2 in extracted_seqs:
+                            cand_seq = extracted_seqs[sid]
+                            p1_seq = extracted_seqs[p1]
+                            p2_seq = extracted_seqs[p2]
+                            
+                            ident_p1_r = validate_recombination.calculate_identity(cand_seq, p1_seq, start, end, invert=False)
+                            ident_p2_r = validate_recombination.calculate_identity(cand_seq, p2_seq, start, end, invert=False)
+                            ident_p1_nr = validate_recombination.calculate_identity(cand_seq, p1_seq, start, end, invert=True)
+                            ident_p2_nr = validate_recombination.calculate_identity(cand_seq, p2_seq, start, end, invert=True)
+                            
+                            if (ident_p2_r > ident_p1_r) and (ident_p1_nr > ident_p2_nr):
+                                passed_dist = True
+                        
+                        # 3. OpenRDP cross-method validation
+                        passed_openrdp = validate_recombination.run_openrdp_validation(
+                            aligned_path, sid, p1, p2, rdp_out
+                        )
+                        
+                        # 4. Regional ML tree validation
+                        passed_tree = validate_recombination.run_regional_tree_validation(
+                            aligned_path, sid, p1, p2, start, end, rdp_out
+                        )
+
+                    # Now categorize according to the rules:
+                    # High confidence = 3SEQ + OpenRDP/RDP5 support + regional tree support
+                    # (Note: also must pass basic validation: length and distance checks)
+                    # Candidate = 3SEQ only (passed length/distance basic checks, but fails one or both of OpenRDP/tree support)
+                    # Discard/hidden = fails validation (fails length check or fails distance check)
+                    
+                    if passed_len and passed_dist:
+                        if passed_openrdp and passed_tree:
+                            val_status = "high_confidence"
+                        else:
+                            val_status = "needs_review"
+                    else:
+                        # Fails basic validation -> Discarded
+                        val_status = "none"
+                        is_r = False
+                            
+                    if is_r:
+                        results[sid]["is_recombinant"] = True
+                        results[sid]["validation_status"] = val_status
+                        if start > 0 and end > 0:
+                            results[sid]["breakpoints"].append([start, end])
+                            
+        return results
     except Exception as e:
-        logger.warning("RDP5 step failed: %s", e)
+        logger.warning("3seq/validation step failed: %s", e)
         return {}
 
 
@@ -1123,7 +1209,7 @@ def _assemble_results(sequences, virus_lc, genotype_map, recomb_results,
     for rec in sequences:
         sid     = rec["id"]
         geno    = genotype_map.get(sid, {})
-        recomb  = recomb_results.get(sid, {"is_recombinant": False, "breakpoints": []})
+        recomb  = recomb_results.get(sid, {"is_recombinant": False, "validation_status": "none", "breakpoints": []})
         muts    = mutation_results.get(sid, {"mutations": [], "drugs": []})
 
         seq_list.append({
@@ -1131,6 +1217,7 @@ def _assemble_results(sequences, virus_lc, genotype_map, recomb_results,
             "virus":          virus_lc.upper(),
             "genotype":       geno.get("genotype", "Unknown"),
             "is_recombinant": recomb["is_recombinant"],
+            "validation_status": recomb.get("validation_status", "none"),
             "breakpoints":    recomb["breakpoints"],
             "nearest_ref":    geno.get("nearest_ref", "—"),
             "epa_score":      geno.get("epa_score", 0.0),

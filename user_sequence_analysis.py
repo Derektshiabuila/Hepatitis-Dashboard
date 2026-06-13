@@ -983,8 +983,17 @@ def render_results(results):
         ]))
         rows = []
         for rec in seqs:
-            badge_color = "danger" if rec.get("is_recombinant") else "secondary"
-            badge_text  = "Yes" if rec.get("is_recombinant") else "No"
+            status = rec.get("validation_status", "none")
+            if status == "high_confidence":
+                badge_color = "danger"
+                badge_text = "Recombinant: High confidence"
+            elif status == "needs_review":
+                badge_color = "warning"
+                badge_text = "Candidate recombinant: Needs review"
+            else:
+                badge_color = "success"
+                badge_text = "No validated recombination detected"
+            
             rows.append(html.Tr([
                 html.Td(html.Code(rec.get("id", "—"))),
                 html.Td(rec.get("virus", "—")),
@@ -1016,7 +1025,7 @@ def render_results(results):
         )
         btn_container_style = {"display": "block"}
     else:
-        recombinants = [r for r in seqs if r.get("is_recombinant")]
+        recombinants = [r for r in seqs if r.get("validation_status", "none") in ("high_confidence", "needs_review")]
         if recombinants:
             rec_items = []
             for rec in recombinants:
@@ -1025,11 +1034,19 @@ def render_results(results):
                     ", ".join(f"{s}–{e} nt" for s, e in bps)
                     if bps else "Breakpoints not resolved"
                 )
+                status = rec.get("validation_status", "none")
+                status_text = (
+                    "High confidence" if status == "high_confidence"
+                    else "Needs review"
+                )
+                status_color = "danger" if status == "high_confidence" else "warning"
+                
                 rec_items.append(
                     dbc.ListGroupItem([
                         html.Strong(rec["id"]),
                         html.Span(f" — {rec.get('genotype','?')}",
                                   className="text-muted ms-1"),
+                        dbc.Badge(status_text, color=status_color, className="ms-2", pill=True),
                         html.Br(),
                         html.Small([
                             html.I(className="bi bi-scissors me-1"),
@@ -1040,7 +1057,7 @@ def render_results(results):
             recombination_panel = html.Div([
                 dbc.Alert(
                     [html.I(className="bi bi-exclamation-triangle-fill me-2"),
-                     f"{len(recombinants)} recombinant sequence(s) detected (3Seq)."],
+                     f"{len(recombinants)} recombinant sequence(s) detected."],
                     color="warning", className="mb-2",
                 ),
                 dbc.ListGroup(rec_items, flush=True),
@@ -1048,7 +1065,7 @@ def render_results(results):
         else:
             recombination_panel = dbc.Alert(
                 [html.I(className="bi bi-check-circle-fill me-2"),
-                 "No recombinants detected by 3Seq."],
+                 "No validated recombination detected."],
                 color="success",
             )
 
