@@ -9,6 +9,4 @@ dependencies:
   - pandas
   - biopython
   - requests
-  - scipy
-  - h5py
   - pip

@@ -1,4 +1,4 @@
-name: python-env
+name: validation-env
 channels:
   - conda-forge
   - bioconda
@@ -9,4 +9,6 @@ dependencies:
   - pandas
   - biopython
   - requests
+  - scipy
+  - h5py
   - pip

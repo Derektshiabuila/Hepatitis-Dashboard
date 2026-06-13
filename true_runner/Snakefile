@@ -591,7 +591,7 @@ rule validate_recombination:
         val = "results/{virus}/validated_recombinants.tsv"
     log:
         "logs/{virus}/validate_recombination.log"
-    conda: "envs/python.yaml"
+    conda: "envs/validation.yaml"
     shell:
         r"""
         set -euo pipefail
