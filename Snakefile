@@ -245,13 +245,21 @@ console set next-cmd-output-file /work/result.xml
 module {params.glue_module} /work/split_fasta/$SAMPLE.fasta
 EOF
         
+            TARGET_DIR="$(realpath results/{wildcards.virus})"
+            HOST_TARGET_DIR="$TARGET_DIR"
+            if [ -n "${HEP_HOST_PROJECT_ROOT:-}" ]; then
+                if [[ "$TARGET_DIR" == /app* ]]; then
+                    HOST_TARGET_DIR="${HEP_HOST_PROJECT_ROOT}${TARGET_DIR#/app}"
+                fi
+            fi
+
             timeout --signal=SIGKILL 600s docker run --rm \
               --platform linux/amd64 \
               --link gluetools-mysql-{wildcards.virus}:gluetools-mysql \
               -e MAFFT_NTHREAD=1 \
               -e OMP_NUM_THREADS=1 \
               -e OPENBLAS_NUM_THREADS=1 \
-              -v $(realpath results/{wildcards.virus}):/work \
+              -v "$HOST_TARGET_DIR:/work" \
               cvrbioinformatics/gluetools:latest \
               java -jar /opt/gluetools/lib/gluetools-core.jar -c /work/gluetools-config_$SAMPLE.xml -f /work/glue_cmd_$SAMPLE.glue -n || true
         

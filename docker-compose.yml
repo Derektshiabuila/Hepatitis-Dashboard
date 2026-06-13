@@ -14,6 +14,7 @@ services:
     environment:
       - HEP_JOBS_DIR=/tmp/hep_dash_jobs
       - HEP_PROJECT_ROOT=/app
+      - HEP_HOST_PROJECT_ROOT=${PWD}
     restart: always
 
 volumes:

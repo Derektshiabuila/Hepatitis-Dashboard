@@ -477,11 +477,19 @@ console set next-cmd-output-file /work/result.xml
 module phdrReportingController invoke-function reportFasta /work/split_fasta/${SAMPLE}.fasta
 EOF
 
+            TARGET_DIR="$CURRENT_DIR/results/hcv"
+            HOST_TARGET_DIR="$TARGET_DIR"
+            if [ -n "${HEP_HOST_PROJECT_ROOT:-}" ]; then
+                if [[ "$TARGET_DIR" == /app* ]]; then
+                    HOST_TARGET_DIR="${HEP_HOST_PROJECT_ROOT}${TARGET_DIR#/app}"
+                fi
+            fi
+
             set +e
             timeout "$TIMEOUT" docker run --rm \
               --platform linux/amd64 \
               --link gluetools-mysql-hcv:gluetools-mysql \
-              -v "$CURRENT_DIR/results/hcv:/work" \
+              -v "$HOST_TARGET_DIR:/work" \
               cvrbioinformatics/gluetools:latest \
               java -jar /opt/gluetools/lib/gluetools-core.jar -c /work/gluetools-config_$SAMPLE.xml -f /work/glue_cmd_$SAMPLE.glue -n
             EXIT_CODE=$?

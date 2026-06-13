@@ -198,11 +198,19 @@ cat > "$OUTPUT_DIR/gluetools-config.xml" << 'EOF'
 </gluetools>
 EOF
 
+# Translate path if running inside a DooD container where /app maps to a host directory
+HOST_OUTPUT_DIR="$OUTPUT_DIR"
+if [ -n "${HEP_HOST_PROJECT_ROOT:-}" ]; then
+    if [[ "$OUTPUT_DIR" == /app* ]]; then
+        HOST_OUTPUT_DIR="${HEP_HOST_PROJECT_ROOT}${OUTPUT_DIR#/app}"
+    fi
+fi
+
 # Run GLUE using Docker, linked to the virus-specific MySQL container
 docker run --rm \
     --platform linux/amd64 \
     --link "${MYSQL_CONTAINER}:gluetools-mysql" \
-    -v "$OUTPUT_DIR:/work" \
+    -v "$HOST_OUTPUT_DIR:/work" \
     cvrbioinformatics/gluetools:latest \
     java -jar /opt/gluetools/lib/gluetools-core.jar -c /work/gluetools-config.xml -f /work/glue_cmd.glue -n
 
