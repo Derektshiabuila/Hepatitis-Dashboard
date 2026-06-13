@@ -224,6 +224,7 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
     Run 3seq on `fasta_path`, write outputs to `outdir`,
     return the path to the normalised TSV.
     """
+    import concurrent.futures
     outdir.mkdir(parents=True, exist_ok=True)
 
     # ── Preflight checks ──────────────────────────────────────────────────
@@ -259,7 +260,6 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
 
     run_id = f"run_{label}"
     parents_path = outdir / f"{run_id}_parents.fasta"
-    children_path = outdir / f"{run_id}_children.fasta"
 
     use_two_file_mode = len(parents) > 0 and len(children) > 0
 
@@ -269,11 +269,7 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
         with parents_path.open("w") as fh:
             for h, s in parents:
                 fh.write(f"{h}\n{s}\n")
-        # Write children file
-        with children_path.open("w") as fh:
-            for h, s in children:
-                fh.write(f"{h}\n{s}\n")
-        log.info("Running in two-file mode: %d parents, %d children", len(parents), len(children))
+        log.info("Parsed %d references (parents) and %d query sequences (children).", len(parents), len(children))
     else:
         target_seq_ids = seq_ids
         log.info("Running in single-file mode: %d sequences", n_seqs)
@@ -327,57 +323,123 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
     if not ptable_path.exists():
         ptable_path = Path.cwd() / "PVT.3SEQ.2017.700"
 
-    # 3seq command
+    start = time.time()
+
     if use_two_file_mode:
-        cmd = [
-            str(threeseq_exe),
-            "-full",
-            str(parents_path.resolve()),
-            str(children_path.resolve()),
-        ]
+        # Determine parallel workers and chunk size
+        max_workers = min(8, os.cpu_count() or 4)
+        chunk_size = (len(children) + max_workers - 1) // max_workers
+        chunks = [children[i:i + chunk_size] for i in range(0, len(children), chunk_size)]
+        log.info("Splitting %d children into %d chunks of size %d for parallel 3seq runs (workers: %d)...",
+                 len(children), len(chunks), chunk_size, max_workers)
+
+        def _run_chunk(chunk_seqs, idx):
+            chunk_children_path = outdir / f"{run_id}_children_chunk{idx}.fasta"
+            with chunk_children_path.open("w") as fh:
+                for h, s in chunk_seqs:
+                    fh.write(f"{h}\n{s}\n")
+            
+            chunk_run_id = f"{run_id}_chunk{idx}"
+            cmd = [
+                str(threeseq_exe),
+                "-full",
+                str(parents_path.resolve()),
+                str(chunk_children_path.resolve()),
+            ]
+            if ptable_path.exists():
+                cmd.extend(["-ptable", str(ptable_path.resolve())])
+            cmd.extend([
+                "-id", chunk_run_id,
+                "-p"
+            ])
+
+            proc = subprocess.run(
+                cmd,
+                cwd=str(outdir),
+                input="Y\n",
+                capture_output=True,
+                text=True,
+                timeout=RDP5_TIMEOUT,
+            )
+            if proc.returncode != 0:
+                log.error("Chunk %d failed. STDOUT:\n%s", idx, proc.stdout)
+                log.error("Chunk %d failed. STDERR:\n%s", idx, proc.stderr)
+                raise RuntimeError(f"3seq chunk {idx} exited with code {proc.returncode}")
+            
+            # Clean up chunk children fasta file
+            try:
+                chunk_children_path.unlink()
+            except Exception:
+                pass
+            return idx
+
+        # Run chunks in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_run_chunk, chunk, idx) for idx, chunk in enumerate(chunks)]
+            for fut in concurrent.futures.as_completed(futures):
+                fut.result() # raises exception if chunk failed
+
+        # Merge chunk outputs
+        csv_src = outdir / f"{run_id}.3s.rec.csv"
+        header_written = False
+        with csv_src.open("w", encoding="utf-8") as out_fh:
+            for idx in range(len(chunks)):
+                chunk_csv = outdir / f"{run_id}_chunk{idx}.3s.rec.csv"
+                if chunk_csv.exists():
+                    with chunk_csv.open("r", encoding="utf-8") as in_fh:
+                        header = in_fh.readline()
+                        if not header_written and header:
+                            out_fh.write(header)
+                            header_written = True
+                        for line in in_fh:
+                            out_fh.write(line)
+                    try:
+                        chunk_csv.unlink()
+                    except Exception:
+                        pass
+                
+                # Cleanup other 3seq chunk files
+                for p in outdir.glob(f"{run_id}_chunk{idx}.3s.*"):
+                    try:
+                        p.unlink()
+                    except Exception:
+                        pass
     else:
+        # Single file mode
         cmd = [
             str(threeseq_exe),
             "-full",
             str(fasta_path.resolve()),
         ]
+        if ptable_path.exists():
+            cmd.extend(["-ptable", str(ptable_path.resolve())])
+        cmd.extend([
+            "-id", run_id,
+            "-p"
+        ])
+        log.info("Running standard 3seq: %s", " ".join(cmd))
+        
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=str(outdir),
+                input="Y\n",
+                capture_output=True,
+                text=True,
+                timeout=RDP5_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(
+                f"3seq timed out after {RDP5_TIMEOUT} s on {label}."
+            )
 
-    if ptable_path.exists():
-        cmd.extend(["-ptable", str(ptable_path.resolve())])
-        log.info("Using P-value table: %s", ptable_path)
-    else:
-        log.warning("P-value table file not found. 3seq might fail.")
-
-    cmd.extend([
-        "-id", run_id,
-        "-p"
-    ])
-    log.info("Running: %s", " ".join(cmd))
-    log.info("Cwd: %s", outdir)
-
-    start = time.time()
-    try:
-        # Input "Y\n" to standard input to auto-confirm memory limits
-        proc = subprocess.run(
-            cmd,
-            cwd=str(outdir),
-            input="Y\n",
-            capture_output=True,
-            text=True,
-            timeout=RDP5_TIMEOUT,
-        )
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError(
-            f"3seq timed out after {RDP5_TIMEOUT} s on {label}."
-        )
+        if proc.returncode != 0:
+            log.error("3seq STDOUT:\n%s", proc.stdout)
+            log.error("3seq STDERR:\n%s", proc.stderr)
+            raise RuntimeError(f"3seq exited with code {proc.returncode}")
 
     elapsed = time.time() - start
-    log.info("3seq finished in %.1f s (exit code %d)", elapsed, proc.returncode)
-
-    if proc.returncode != 0:
-        log.error("3seq STDOUT:\n%s", proc.stdout)
-        log.error("3seq STDERR:\n%s", proc.stderr)
-        raise RuntimeError(f"3seq exited with code {proc.returncode}")
+    log.info("3seq finished in %.1f s", elapsed)
 
     # Check for CSV output
     csv_src = outdir / f"{run_id}.3s.rec.csv"
@@ -400,15 +462,10 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
     out_tsv = outdir / "recombinants.tsv"
     _write_tsv(rows, out_tsv)
 
-    # Cleanup temporary split files
+    # Cleanup temporary parents file
     if parents_path.exists():
         try:
             parents_path.unlink()
-        except Exception:
-            pass
-    if children_path.exists():
-        try:
-            children_path.unlink()
         except Exception:
             pass
 
