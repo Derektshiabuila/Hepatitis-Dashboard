@@ -198,6 +198,18 @@ cat > "$OUTPUT_DIR/gluetools-config.xml" << 'EOF'
 </gluetools>
 EOF
 
+# If running inside a Docker container, try to auto-detect host project root
+if [ -z "${HEP_HOST_PROJECT_ROOT:-}" ] && [ -f /.dockerenv ]; then
+    CONTAINER_ID=$(hostname)
+    if command -v docker >/dev/null 2>&1; then
+        HOST_RESULTS_DIR=$(docker inspect "$CONTAINER_ID" --format='{{range .Mounts}}{{if eq .Destination "/app/results"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)
+        if [ -n "$HOST_RESULTS_DIR" ]; then
+            HEP_HOST_PROJECT_ROOT=$(dirname "$HOST_RESULTS_DIR")
+            echo "Auto-detected HEP_HOST_PROJECT_ROOT on host: $HEP_HOST_PROJECT_ROOT" >&2
+        fi
+    fi
+fi
+
 # Translate path if running inside a DooD container where /app maps to a host directory
 HOST_OUTPUT_DIR="$OUTPUT_DIR"
 if [ -n "${HEP_HOST_PROJECT_ROOT:-}" ]; then
