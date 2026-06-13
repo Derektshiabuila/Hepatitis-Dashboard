@@ -10,3 +10,5 @@ dependencies:
   - raxml=8.2.12
   - python>=3.10
   - 3seq
+  - blast
+

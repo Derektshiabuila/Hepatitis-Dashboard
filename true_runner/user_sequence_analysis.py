@@ -226,6 +226,24 @@ def user_seq_tab_content():
                                 ],
                             ),
 
+                            # Virus selection / override
+                            html.Div([
+                                html.Label("Virus Target:", className="fw-bold me-3 text-secondary", style={"fontSize": "0.95rem"}),
+                                dbc.RadioItems(
+                                    id="useq-virus-select",
+                                    options=[
+                                        {"label": "Auto-detect", "value": "auto"},
+                                        {"label": "HBV (Hepatitis B)", "value": "HBV"},
+                                        {"label": "HCV (Hepatitis C)", "value": "HCV"},
+                                        {"label": "HEV (Hepatitis E)", "value": "HEV"},
+                                    ],
+                                    value="auto",
+                                    inline=True,
+                                    className="d-inline-block",
+                                    style={"fontSize": "0.9rem"}
+                                )
+                            ], className="mt-3 mb-2 d-flex align-items-center bg-light p-2 rounded border border-light"),
+
                             html.Hr(),
 
                             # Validate + Submit buttons
@@ -679,6 +697,7 @@ def show_upload_filename(filename):
     Output("useq-btn-recomb",          "disabled"),
     Output("useq-results-section",     "style"),
     Output("useq-progress-section",    "style"),
+    Output("useq-virus-select",        "value"),
     Input("useq-btn-clear", "n_clicks"),
     prevent_initial_call=True,
 )
@@ -693,6 +712,7 @@ def clear_all(n_clicks):
         True,                       # recomb button disabled
         {"display": "none"},        # results section
         {"display": "none"},        # progress section
+        "auto",                     # virus select reset
     )
 
 
@@ -708,10 +728,11 @@ def clear_all(n_clicks):
     State("useq-fasta-textarea", "value"),
     State("useq-file-upload",    "filename"),
     State("useq-input-mode-tabs", "active_tab"),
+    State("useq-virus-select",  "value"),
     prevent_initial_call=True,
 )
 def validate_sequences(n_clicks, upload_contents, textarea_value,
-                       upload_filename, active_tab):
+                       upload_filename, active_tab, selected_virus_override):
     """
     1. Determine the FASTA source (paste vs upload).
     2. Parse the FASTA.
@@ -748,7 +769,10 @@ def validate_sequences(n_clicks, upload_contents, textarea_value,
     validation_issues = _validate_sequences(sequences)
 
     # ── Detect virus ──
-    detected_virus = _detect_virus(sequences) if sequences else None
+    if selected_virus_override and selected_virus_override != "auto":
+        detected_virus = selected_virus_override
+    else:
+        detected_virus = _detect_virus(sequences) if sequences else None
 
     # ── Determine if blocking errors exist ──
     blocking = bool(
