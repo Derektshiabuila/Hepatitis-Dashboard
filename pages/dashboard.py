@@ -49,26 +49,39 @@ data_store = None
 def get_data_store():
     """Helper function to access the global data store"""
     global data_store
-    if data_store is None:
-        try:
-            from data_loader import load_and_preprocess_data
-            data_store = load_and_preprocess_data()
-            print("Data store loaded successfully")
-        except Exception as e:
-            print(f"Error loading data: {e}")
-            # Create empty data store structure to prevent further errors
-            data_store = {
-                'hbv_data': pd.DataFrame(),
-                'hcv_data': pd.DataFrame(),
-                'hev_data': pd.DataFrame(),
-                'ihme_df': pd.DataFrame(),
-                'population_df': pd.DataFrame(),
-                'coord_lookup': {},
-                'hbv_mut': pd.DataFrame(),
-                'hcv_mut': pd.DataFrame(),
-                'hev_mut': pd.DataFrame()
-            }
+    if data_store is not None:
+        return data_store
+
+    import flask
+    try:
+        if flask.has_app_context() and "DATA_STORE" in flask.current_app.config:
+            data_store = flask.current_app.config["DATA_STORE"]
+            if data_store is not None:
+                print("Data store retrieved from flask.current_app.config")
+                return data_store
+    except Exception as e:
+        print(f"Failed to access flask config: {e}")
+
+    try:
+        from data_loader import load_and_preprocess_data
+        data_store = load_and_preprocess_data()
+        print("Data store loaded successfully")
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        # Create empty data store structure to prevent further errors
+        data_store = {
+            'hbv_data': pd.DataFrame(),
+            'hcv_data': pd.DataFrame(),
+            'hev_data': pd.DataFrame(),
+            'ihme_df': pd.DataFrame(),
+            'population_df': pd.DataFrame(),
+            'coord_lookup': {},
+            'hbv_mut': pd.DataFrame(),
+            'hcv_mut': pd.DataFrame(),
+            'hev_mut': pd.DataFrame()
+        }
     return data_store
+
 
 # === CONFIG & CONSTANTS ======================================================
 HBV_GENOTYPE_COLORS = {

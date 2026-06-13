@@ -487,6 +487,48 @@ def normalize_genotype_label(genotype: str, virus: str) -> str:
     return g
 
 def load_and_preprocess_data():
+    cache_file = get_data_path("results/preprocessed_data_store.pkl")
+    
+    # List of source files to check for changes
+    source_files = [
+        "results/hbv/hbv_metadata.tsv",
+        "results/hcv/hcv_metadata.tsv",
+        "results/hev/hev_metadata.tsv",
+        "results/hbv/final_resistance.tsv",
+        "results/hcv/final_resistance.tsv",
+        "results/hev/final_resistance.tsv",
+        "data/population_by_country_year.csv",
+        "data/IHME-GBD_2021_DATA-9e7ec2c0-1.csv",
+        "data/WHO_regions_countries_coordinates.txt"
+    ]
+    
+    # Check if cache is valid (exists and newer than all existing source files)
+    cache_valid = False
+    if os.path.exists(cache_file):
+        try:
+            cache_mtime = os.path.getmtime(cache_file)
+            cache_valid = True
+            for sf in source_files:
+                sf_path = get_data_path(sf)
+                if os.path.exists(sf_path) and os.path.getmtime(sf_path) > cache_mtime:
+                    cache_valid = False
+                    print(f"🔄 Cache invalidated: {sf} has been updated.")
+                    break
+        except Exception as e:
+            print(f"⚠️ Error checking cache mtimes: {e}")
+            cache_valid = False
+                
+    if cache_valid:
+        print("🚀 Loading preprocessed data from cache...")
+        try:
+            import pickle
+            with open(cache_file, 'rb') as f:
+                data_store = pickle.load(f)
+                print("✅ Cache loaded successfully.")
+                return data_store
+        except Exception as e:
+            print(f"⚠️ Failed to load cache: {e}, falling back to full preprocessing...")
+
     print("📥 Loading data...")
     
     try:
@@ -784,8 +826,7 @@ def load_and_preprocess_data():
 
         print("✅ Done loading data.")
         
-        # Return all data, even if some dataframes are empty
-        return {
+        data_store = {
             'hbv_data': hbv_data,
             'hcv_data': hcv_data,
             'hev_data': hev_data,
@@ -809,6 +850,19 @@ def load_and_preprocess_data():
             'hcv_summary_raw': hcv_data.copy(),
             'hev_summary_raw': hev_data.copy()
         }
+        
+        # Save to cache
+        print("💾 Saving preprocessed data to cache...")
+        try:
+            import pickle
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            with open(cache_file, 'wb') as f:
+                pickle.dump(data_store, f, protocol=pickle.HIGHEST_PROTOCOL)
+            print("✅ Cache saved successfully.")
+        except Exception as e:
+            print(f"⚠️ Failed to save cache: {e}")
+            
+        return data_store
         
     except Exception as e:
         print(f"❌ Critical error loading data: {e}")

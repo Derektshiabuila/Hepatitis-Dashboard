@@ -38,6 +38,7 @@ results/**/*.contree
 results/**/split_fasta/
 results/**/resistance/
 results/**/glue/
+results/**/*.pkl
 
 # Large raw dataset
 data/IHME-GBD_2021_DATA-9e7ec2c0-1.csv
