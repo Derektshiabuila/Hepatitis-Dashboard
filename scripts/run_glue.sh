@@ -198,8 +198,8 @@ cat > "$OUTPUT_DIR/gluetools-config.xml" << 'EOF'
 </gluetools>
 EOF
 
-# If running inside a Docker container, try to auto-detect host project root
-if [ -z "${HEP_HOST_PROJECT_ROOT:-}" ] && [ -f /.dockerenv ]; then
+# If running inside a Docker container, always auto-detect host project root to get canonical path (bypasses symlinks)
+if [ -f /.dockerenv ]; then
     CONTAINER_ID=$(hostname)
     if command -v docker >/dev/null 2>&1; then
         HOST_RESULTS_DIR=$(docker inspect "$CONTAINER_ID" --format='{{range .Mounts}}{{if eq .Destination "/app/results"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)
