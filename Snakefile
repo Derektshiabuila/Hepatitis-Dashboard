@@ -42,6 +42,7 @@ rule all:
     input:
         expand("results/{virus}/final_resistance.tsv", virus=["hbv", "hcv", "hev"]),
         expand("results/{virus}/all_recombination.tsv", virus=["hbv", "hcv", "hev"]),
+        expand("results/{virus}/validated_recombinants.tsv", virus=["hbv", "hcv", "hev"]),
         expand("results/{virus}/metadata_with_recomb.tsv", virus=VIRUSES),
 
 
@@ -544,7 +545,7 @@ rule merge_recombination:
 rule annotate_recombination:
     input:
         resistance = "results/{virus}/final_resistance.tsv",
-        recomb     = "results/{virus}/all_recombination.tsv"
+        recomb     = "results/{virus}/validated_recombinants.tsv"
     output:
         "results/{virus}/metadata_with_recomb.tsv"
     log:
