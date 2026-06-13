@@ -581,6 +581,23 @@ merged.to_csv("{output}", sep="\t", index=False)
 PYEOF
         """
 
+# ============================================
+# VALIDATE RECOMBINATION
+# ============================================
+rule validate_recombination:
+    input:
+        recomb = "results/{virus}/all_recombination.tsv"
+    output:
+        val = "results/{virus}/validated_recombinants.tsv"
+    log:
+        "logs/{virus}/validate_recombination.log"
+    conda: "envs/python.yaml"
+    shell:
+        r"""
+        set -euo pipefail
+        python scripts/validate_recombination.py --virus {wildcards.virus} 2>&1 | tee {log}
+        """
+
 ###########################################
 # 7 — FINAL MERGE
 ###########################################
