@@ -1117,7 +1117,17 @@ def render_results(results):
             dbc.CardBody(mut_items)
         ], className="mb-4 shadow-sm border-danger")
     else:
-        mutations_panel = html.Div()
+        mutations_panel = dbc.Card([
+            dbc.CardHeader([html.I(className="bi bi-capsule me-2"), " Mutation & Drug Resistance Profile"]),
+            dbc.CardBody([
+                dbc.Alert(
+                    [html.I(className="bi bi-info-circle-fill me-2"),
+                     "No drug-resistance mutations detected for the submitted sequence(s)."],
+                    color="info",
+                    className="mb-0"
+                )
+            ])
+        ], className="mb-4 shadow-sm border-info")
 
     # ── 7d: Sequence map (Plotly) ──
     fig = _build_sequence_map_figure(seqs, seq_map)

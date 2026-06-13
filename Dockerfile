@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     xvfb \
     xauth \
+    docker.io \
     && dpkg --add-architecture i386 \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
