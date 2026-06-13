@@ -225,13 +225,24 @@ if [ -z "$MYSQL_NET" ]; then
 fi
 
 # Run GLUE using Docker, linked to the virus-specific MySQL container
-docker run --rm \
-    --platform linux/amd64 \
-    --network "$MYSQL_NET" \
-    --link "${MYSQL_CONTAINER}:gluetools-mysql" \
-    -v "$HOST_OUTPUT_DIR:/work" \
-    cvrbioinformatics/gluetools:latest \
-    java -jar /opt/gluetools/lib/gluetools-core.jar -c /work/gluetools-config.xml -f /work/glue_cmd.glue -n
+if [ "$MYSQL_NET" = "bridge" ]; then
+    # Default built-in bridge network doesn't support --network with --link
+    docker run --rm \
+        --platform linux/amd64 \
+        --link "${MYSQL_CONTAINER}:gluetools-mysql" \
+        -v "$HOST_OUTPUT_DIR:/work" \
+        cvrbioinformatics/gluetools:latest \
+        java -jar /opt/gluetools/lib/gluetools-core.jar -c /work/gluetools-config.xml -f /work/glue_cmd.glue -n
+else
+    # User-defined network requires --network to link
+    docker run --rm \
+        --platform linux/amd64 \
+        --network "$MYSQL_NET" \
+        --link "${MYSQL_CONTAINER}:gluetools-mysql" \
+        -v "$HOST_OUTPUT_DIR:/work" \
+        cvrbioinformatics/gluetools:latest \
+        java -jar /opt/gluetools/lib/gluetools-core.jar -c /work/gluetools-config.xml -f /work/glue_cmd.glue -n
+fi
 
 rm -f "$OUTPUT_DIR/gluetools-config.xml"
 
