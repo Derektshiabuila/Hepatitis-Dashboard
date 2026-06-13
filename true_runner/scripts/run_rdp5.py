@@ -381,7 +381,11 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
 
         # Merge chunk outputs
         csv_src = outdir / f"{run_id}.3s.rec.csv"
+        longrec_src = outdir / f"{run_id}.3s.longRec"
+        
+        unique_longrec_lines = set()
         header_written = False
+        
         with csv_src.open("w", encoding="utf-8") as out_fh:
             for idx in range(len(chunks)):
                 chunk_csv = outdir / f"{run_id}_chunk{idx}.3s.rec.csv"
@@ -398,12 +402,28 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
                     except Exception:
                         pass
                 
+                # Load and accumulate longRec chunk files
+                chunk_longrec = outdir / f"{run_id}_chunk{idx}.3s.longRec"
+                if chunk_longrec.exists():
+                    with chunk_longrec.open("r", encoding="utf-8") as in_fh:
+                        for line in in_fh:
+                            unique_longrec_lines.add(line.strip())
+                    try:
+                        chunk_longrec.unlink()
+                    except Exception:
+                        pass
+                
                 # Cleanup other 3seq chunk files
                 for p in outdir.glob(f"{run_id}_chunk{idx}.3s.*"):
                     try:
                         p.unlink()
                     except Exception:
                         pass
+                        
+        if unique_longrec_lines:
+            with longrec_src.open("w", encoding="utf-8") as out_fh:
+                for line in sorted(unique_longrec_lines):
+                    out_fh.write(f"{line}\n")
     else:
         # Single file mode
         cmd = [
