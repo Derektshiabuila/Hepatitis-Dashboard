@@ -7,3 +7,6 @@ pycountry
 gunicorn
 flask
 biopython
+scipy
+h5py
+
