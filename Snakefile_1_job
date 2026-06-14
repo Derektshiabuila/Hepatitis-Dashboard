@@ -212,9 +212,9 @@ EOF
         
             TARGET_DIR="$(realpath results/{wildcards.virus})"
             HOST_TARGET_DIR="$TARGET_DIR"
-            if [ -n "$${HEP_HOST_PROJECT_ROOT:-}" ]; then
+            if [ -n "$${{HEP_HOST_PROJECT_ROOT:-}}" ]; then
                 if [[ "$TARGET_DIR" == /app* ]]; then
-                    HOST_TARGET_DIR="$${HEP_HOST_PROJECT_ROOT}$${TARGET_DIR#/app}"
+                    HOST_TARGET_DIR="$${{HEP_HOST_PROJECT_ROOT}}$${{TARGET_DIR#/app}}"
                 fi
             fi
 
