@@ -1,6 +1,6 @@
 #!/bin/bash
 # scratch/diagnose_glue.sh
-# Run this on the server 'tartarus' inside the true_runner directory
+# Run this on the server 'tartarus' inside the project root directory
 
 set -euo pipefail
 

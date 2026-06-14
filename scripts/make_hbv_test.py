@@ -85,15 +85,7 @@ def main():
     else:
         print(f"Error running MAFFT: {res.stderr}")
         
-    # Copy to true_runner test_data directory if it exists
-    true_runner_out = project_root / "true_runner" / "test_data" / "hbv"
-    true_runner_out.mkdir(parents=True, exist_ok=True)
-    
-    # copy files
-    import shutil
-    shutil.copy2(combined_path, true_runner_out / "test_hbv_combined.fasta")
-    shutil.copy2(aligned_path, true_runner_out / "test_hbv_aligned.fasta")
-    print(f"Copied test files to true_runner: {true_runner_out}")
+
 
 if __name__ == '__main__':
     main()
