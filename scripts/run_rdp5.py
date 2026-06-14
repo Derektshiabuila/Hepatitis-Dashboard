@@ -108,16 +108,45 @@ def _parse_3seq_csv(csv_path: Path, all_seq_ids: list[str]) -> list[dict]:
             if not row or len(row) < 13:
                 continue
 
-            parent_1_raw = row[0].strip()
-            parent_2_raw = row[1].strip()
-            child_raw = row[2].strip()
-            p_val_raw = row[6].strip()
-            bp_str = row[12].strip()
+            # Find the first column containing "&"
+            bp_idx = -1
+            for i, col in enumerate(row):
+                if "&" in col:
+                    bp_idx = i
+                    break
+            
+            if bp_idx == -1 or bp_idx < 10:
+                bp_idx = 12
+                if len(row) <= bp_idx:
+                    continue
 
-            # Map to first token of the raw headers to match all_seq_ids
-            child_id = child_raw.split()[0] if child_raw else ""
-            parent_1 = parent_1_raw.split()[0] if parent_1_raw else ""
-            parent_2 = parent_2_raw.split()[0] if parent_2_raw else ""
+            # Extract accessions robustly considering potential splits
+            p1_raw = row[0].strip()
+            if row[bp_idx - 10].startswith(" "):
+                # Child (C_ACCNUM) was split, so P1 is at 0, P2 is at 1, Child starts at 2
+                parent_1 = p1_raw.split()[0]
+                parent_2 = row[1].strip().split()[0]
+                child_id = row[2].strip().split()[0]
+            elif not p1_raw.startswith("ref_") and " " in p1_raw:
+                # P1 (P_ACCNUM) might be split.
+                # If the column before Child is a reference, then P1 was split, and P2 is at bp_idx - 11.
+                if row[bp_idx - 11].strip().startswith("ref_"):
+                    parent_1 = p1_raw.split()[0]
+                    parent_2 = row[bp_idx - 11].strip().split()[0]
+                    child_id = row[bp_idx - 10].strip().split()[0]
+                else:
+                    # P2 was split, so P1 is at 0, P2 starts at 1, Child is at bp_idx - 10
+                    parent_1 = p1_raw.split()[0]
+                    parent_2 = row[1].strip().split()[0]
+                    child_id = row[bp_idx - 10].strip().split()[0]
+            else:
+                # Standard case or fallback (P2 might be split, but P1 is at 0 and Child is at bp_idx - 10)
+                parent_1 = p1_raw.split()[0]
+                parent_2 = row[1].strip().split()[0]
+                child_id = row[bp_idx - 10].strip().split()[0]
+
+            p_val_raw = row[bp_idx - 6].strip()
+            bp_str = row[bp_idx].strip()
 
             if not child_id:
                 continue
@@ -242,8 +271,9 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
         for line in fh:
             if line.startswith(">"):
                 if current_header:
-                    seq_entry = (current_header, "".join(current_seq))
-                    if current_header[1:].startswith("ref_"):
+                    header_id = current_header[1:].split()[0].strip()
+                    seq_entry = (">" + header_id, "".join(current_seq))
+                    if header_id.startswith("ref_"):
                         parents.append(seq_entry)
                     else:
                         children.append(seq_entry)
@@ -252,8 +282,9 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
             else:
                 current_seq.append(line.strip())
         if current_header:
-            seq_entry = (current_header, "".join(current_seq))
-            if current_header[1:].startswith("ref_"):
+            header_id = current_header[1:].split()[0].strip()
+            seq_entry = (">" + header_id, "".join(current_seq))
+            if header_id.startswith("ref_"):
                 parents.append(seq_entry)
             else:
                 children.append(seq_entry)
@@ -426,10 +457,17 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
                     out_fh.write(f"{line}\n")
     else:
         # Single file mode
+        sanitized_input_path = outdir / f"{run_id}_input_sanitized.fasta"
+        with sanitized_input_path.open("w") as fh:
+            for h, s in parents:
+                fh.write(f"{h}\n{s}\n")
+            for h, s in children:
+                fh.write(f"{h}\n{s}\n")
+
         cmd = [
             str(threeseq_exe),
             "-full",
-            str(fasta_path.resolve()),
+            str(sanitized_input_path.resolve()),
         ]
         if ptable_path.exists():
             cmd.extend(["-ptable", str(ptable_path.resolve())])
@@ -475,6 +513,16 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
         ]
         out_tsv = outdir / "recombinants.tsv"
         _write_tsv(rows, out_tsv)
+
+        # Cleanup temporary files before early return
+        if parents_path.exists():
+            try: parents_path.unlink()
+            except Exception: pass
+        sanitized_input_path = outdir / f"{run_id}_input_sanitized.fasta"
+        if sanitized_input_path.exists():
+            try: sanitized_input_path.unlink()
+            except Exception: pass
+
         return out_tsv
 
     # Parse and write normalised TSV
@@ -482,10 +530,16 @@ def run_rdp5(fasta_path: Path, outdir: Path, virus: str = None, label: str = "se
     out_tsv = outdir / "recombinants.tsv"
     _write_tsv(rows, out_tsv)
 
-    # Cleanup temporary parents file
+    # Cleanup temporary parents file and sanitized input file
     if parents_path.exists():
         try:
             parents_path.unlink()
+        except Exception:
+            pass
+    sanitized_input_path = outdir / f"{run_id}_input_sanitized.fasta"
+    if sanitized_input_path.exists():
+        try:
+            sanitized_input_path.unlink()
         except Exception:
             pass
 
