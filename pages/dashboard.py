@@ -3894,7 +3894,20 @@ def compute_filtered_store(virus, years, regions, countries, genotypes):
     if genotypes:
         df = df[df["genotype"].isin(genotypes)]
 
-    light = df[["ID", "Country_standard", "WHO_Regions", "Year", "genotype", "is_recombinant", "recombination_class"]].copy()
+    # Ensure all required columns exist, even if missing from cache (e.g. older files)
+    cols = ["ID", "Country_standard", "WHO_Regions", "Year", "genotype", "is_recombinant", "recombination_class"]
+    for col in cols:
+        if col not in df.columns:
+            if col == "is_recombinant":
+                df[col] = "false"
+            elif col == "recombination_class":
+                df[col] = "none"
+            elif col == "ID":
+                df[col] = ""
+            else:
+                df[col] = None
+
+    light = df[cols].copy()
     return _df_to_json(light)
 
 
@@ -4687,6 +4700,13 @@ def render_map(filtered_json, gap_json, ihme_json, virus, display_mode, map_mode
     
     # Show/hide epidemiology controls based on map mode - DEFINE THIS AT THE START
     epi_controls_style = {"display": "block"} if map_mode == "epidemiology" else {"display": "none"}
+
+    # Handle empty/missing filtered data gracefully
+    if (map_mode == "sequences" or map_mode == "recombinants" or not map_mode) and filtered.empty:
+        fig = _empty_world("No sequence data available for current filters")
+        title = f"{selected_virus} Sequence Map"
+        subtitle = "No sequences found"
+        return fig, title, subtitle, epi_controls_style
 
     # MODE 1: Coverage map
     if map_mode == "coverage":
