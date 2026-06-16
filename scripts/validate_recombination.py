@@ -404,11 +404,19 @@ def main():
         ident_p1_nr = calculate_identity(cand_seq, p1_seq, start, end, invert=True)
         ident_p2_nr = calculate_identity(cand_seq, p2_seq, start, end, invert=True)
         
-        # Check parent switching
+        # Check parent switching and minimum identity to parents (>= 0.85)
         passed_dist = (ident_p2_r > ident_p1_r) and (ident_p1_nr > ident_p2_nr)
+        
+        min_identity = 0.85
+        passed_identity = (ident_p2_r >= min_identity) and (ident_p1_nr >= min_identity)
         
         if not passed_dist:
             log.debug("Candidate %s rejected: failed distance parent-switching check.", candidate_id)
+            continue
+            
+        if not passed_identity:
+            log.debug("Candidate %s rejected: failed minimum identity check (P2 recomb: %.4f, P1 non-recomb: %.4f).", 
+                      candidate_id, ident_p2_r, ident_p1_nr)
             continue
             
         # ── Step 2b: OpenRDP Cross-Validation ────────────────────────────────
