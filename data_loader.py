@@ -656,16 +656,80 @@ def load_and_preprocess_data():
                         else:
                             rec_df["is_recombinant"] = rec_df["is_recombinant"].fillna("true").astype(str).str.lower()
                         
-                        df = df.merge(rec_df[["ID", "is_recombinant"]].drop_duplicates("ID"), on="ID", how="left")
+                        # --- Classify recombination events ---
+                        anno_file = f"refs/{virus}/ref_annotations.tsv"
+                        anno_map = {}
+                        if os.path.exists(get_data_path(anno_file)):
+                            try:
+                                anno_df = pd.read_csv(get_data_path(anno_file), sep="\t", dtype=str)
+                                anno_df.columns = [c.lower() for c in anno_df.columns]
+                                ref_id_col = "sequenceid" if "sequenceid" in anno_df.columns else anno_df.columns[0]
+                                ref_geno_col = "genotype" if "genotype" in anno_df.columns else anno_df.columns[1]
+                                for _, row in anno_df.iterrows():
+                                    seq_id = str(row[ref_id_col]).strip()
+                                    clean_id = seq_id.replace("ref_", "")
+                                    anno_map[seq_id] = row[ref_geno_col]
+                                    anno_map[clean_id] = row[ref_geno_col]
+                                    anno_map[f"ref_{clean_id}"] = row[ref_geno_col]
+                            except Exception as e:
+                                print(f"⚠️ Error loading ref_annotations.tsv for {virus}: {e}")
+                                
+                        def clean_geno_info(g, v):
+                            if pd.isna(g):
+                                return None
+                            g = str(g).strip().upper()
+                            if not g:
+                                return None
+                            if v.lower() in ("hcv", "hev"):
+                                match = re.match(r"([1-8])([A-Z]*)", g, re.IGNORECASE)
+                                if match:
+                                    return {"major": match.group(1), "subtype": match.group(0).lower()}
+                                return {"major": g, "subtype": g.lower()}
+                            elif v.lower() == "hbv":
+                                return {"major": g[0], "subtype": g}
+                            return {"major": g, "subtype": g}
+                            
+                        def get_recomb_class(row):
+                            p1 = row.get("parent_1")
+                            p2 = row.get("parent_2")
+                            if pd.isna(p1) or pd.isna(p2):
+                                return "unknown"
+                            p1 = str(p1).strip()
+                            p2 = str(p2).strip()
+                            p1_geno = anno_map.get(p1, None)
+                            p2_geno = anno_map.get(p2, None)
+                            if p1_geno is None or p2_geno is None:
+                                return "unknown"
+                            p1_info = clean_geno_info(p1_geno, virus)
+                            p2_info = clean_geno_info(p2_geno, virus)
+                            if p1_info is None or p2_info is None:
+                                return "unknown"
+                            if p1_info["major"] != p2_info["major"]:
+                                return "inter_genotypic"
+                            elif p1_info["subtype"] != p2_info["subtype"]:
+                                return "intra_genotypic"
+                            else:
+                                return "intra_subtype"
+                                
+                        classes = []
+                        for _, row in rec_df.iterrows():
+                            classes.append(get_recomb_class(row))
+                        rec_df["recombination_class"] = classes
+                        
+                        df = df.merge(rec_df[["ID", "is_recombinant", "recombination_class"]].drop_duplicates("ID"), on="ID", how="left")
                     else:
                         df["is_recombinant"] = "false"
+                        df["recombination_class"] = "none"
                 except Exception as e:
                     print(f"❌ Error loading recombinants for {virus}: {e}")
                     df["is_recombinant"] = "false"
+                    df["recombination_class"] = "none"
             else:
                 df["is_recombinant"] = "false"
+                df["recombination_class"] = "none"
             
             df["is_recombinant"] = df["is_recombinant"].fillna("false")
+            df["recombination_class"] = df["recombination_class"].fillna("none")
             return df
 
         hbv_data = merge_recombinants_data(hbv_data, "hbv")

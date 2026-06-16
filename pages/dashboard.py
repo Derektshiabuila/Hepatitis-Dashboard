@@ -2723,7 +2723,7 @@ def build_indicators(virus):
                         dbc.Col([
                             dbc.CardBody([
                                 html.H6("Recombinants"),
-                                html.H4(id="indicator-recombinants")
+                                html.Div(id="indicator-recombinants")
                             ])
                         ], width=10),
                         dbc.Col([
@@ -3900,14 +3900,43 @@ def update_indicators(filtered_json, selected_years):
     base_genotypes = g[g != "Recombinant"].dropna()
     base_genotype_count = base_genotypes.nunique()
 
-    # Recombinants count
+    # Recombinants count and breakdown
     recomb_count = (g == "Recombinant").sum()
+    
+    inter_count = 0
+    intra_geno_count = 0
+    intra_sub_count = 0
+    
+    if "recombination_class" in df.columns:
+        recomb_df = df[df["genotype"] == "Recombinant"]
+        classes = recomb_df["recombination_class"].value_counts().to_dict()
+        inter_count = classes.get("inter_genotypic", 0)
+        intra_geno_count = classes.get("intra_genotypic", 0)
+        intra_sub_count = classes.get("intra_subtype", 0)
+        
+    recomb_display = html.Div([
+        html.H4(f"{recomb_count:,}", className="mb-1", style={"fontWeight": "bold"}),
+        html.Div([
+            html.Div([
+                html.Span("Inter-Genotypic: ", style={"color": "#e00603", "fontWeight": "bold"}),
+                f"{inter_count:,}"
+            ], style={"fontSize": "0.75rem", "margin": "0"}),
+            html.Div([
+                html.Span("Intra-Genotypic: ", style={"color": "#f0ad4e", "fontWeight": "bold"}),
+                f"{intra_geno_count:,}"
+            ], style={"fontSize": "0.75rem", "margin": "0"}),
+            html.Div([
+                html.Span("Intra-Subtype: ", style={"color": "#5bc0de", "fontWeight": "bold"}),
+                f"{intra_sub_count:,}"
+            ], style={"fontSize": "0.75rem", "margin": "0"})
+        ])
+    ])
 
     # Years label
     years_text = f"{selected_years[0]} - {selected_years[1]}" \
         if selected_years and len(selected_years) == 2 else "All years"
 
-    return f"{total_genomes:,}", str(unique_countries), f"{base_genotype_count}", f"{recomb_count:,}", years_text
+    return f"{total_genomes:,}", str(unique_countries), f"{base_genotype_count}", recomb_display, years_text
 
 
 @callback(
