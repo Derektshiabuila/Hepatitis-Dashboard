@@ -636,9 +636,11 @@ def load_and_preprocess_data():
             )
 
         # --- Merge validated recombinants data ---
+        recombs_dict = {}
         def merge_recombinants_data(df, virus):
             recomb_file = f"results/{virus}/validated_recombinants.tsv"
             recomb_path = get_data_path(recomb_file)
+            rec_df_out = pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"])
             if os.path.exists(recomb_path):
                 print(f"🧬 Loading validated recombinants for {virus.upper()}...")
                 try:
@@ -717,6 +719,11 @@ def load_and_preprocess_data():
                         rec_df["recombination_class"] = classes
                         
                         df = df.merge(rec_df[["ID", "is_recombinant", "recombination_class"]].drop_duplicates("ID"), on="ID", how="left")
+                        
+                        for col in ["parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods"]:
+                            if col not in rec_df.columns:
+                                rec_df[col] = None
+                        rec_df_out = rec_df
                     else:
                         df["is_recombinant"] = "false"
                         df["recombination_class"] = "none"
@@ -730,6 +737,7 @@ def load_and_preprocess_data():
             
             df["is_recombinant"] = df["is_recombinant"].fillna("false")
             df["recombination_class"] = df["recombination_class"].fillna("none")
+            recombs_dict[virus] = rec_df_out
             return df
 
         hbv_data = merge_recombinants_data(hbv_data, "hbv")
@@ -957,7 +965,10 @@ def load_and_preprocess_data():
             'cov_hev': hev_cov,
             'hbv_summary_raw': hbv_data.copy(),
             'hcv_summary_raw': hcv_data.copy(),
-            'hev_summary_raw': hev_data.copy()
+            'hev_summary_raw': hev_data.copy(),
+            'hbv_recombs': recombs_dict.get('hbv', pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"])),
+            'hcv_recombs': recombs_dict.get('hcv', pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"])),
+            'hev_recombs': recombs_dict.get('hev', pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"]))
         }
         
         # Save to cache
@@ -998,5 +1009,8 @@ def load_and_preprocess_data():
             'cov_hev': pd.DataFrame(),
             'hbv_summary_raw': pd.DataFrame(),
             'hcv_summary_raw': pd.DataFrame(),
-            'hcv_summary_raw': pd.DataFrame()
+            'hev_summary_raw': pd.DataFrame(),
+            'hbv_recombs': pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"]),
+            'hcv_recombs': pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"]),
+            'hev_recombs': pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"])
         }

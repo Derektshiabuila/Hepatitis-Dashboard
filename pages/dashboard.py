@@ -23,6 +23,7 @@ register_page(__name__, path="/dashboard", name="Dashboard")
 
 # Import data loading functions
 from data_loader import load_and_preprocess_data
+from cache_config import cache
 from user_sequence_analysis import (
     USER_SEQ_STORES,
     user_seq_tab_button,
@@ -886,6 +887,60 @@ def create_world_map(
                     "Log10: %{z:.2f}<extra></extra>"
                 ),
                 customdata=valid_nonzero["Metric_raw"].values,
+            )
+        )
+    
+    # RECOMBINANTS MODE
+    elif display_mode == "recombinants":
+        # Calculate log10 values for choropleth if we have counts > 0
+        z_vals = (
+            valid["Metric_raw"].apply(lambda x: np.log10(x) if (pd.notna(x) and x > 0) else np.nan)
+            .astype(float)
+            .to_numpy()
+        )
+        if np.all(np.isnan(z_vals)):
+            # Fallback to zeros/no data if no recombinants found
+            z_vals = np.zeros(len(valid))
+            vmin, vmax = 0, 1
+        else:
+            vmin = float(np.nanmin(z_vals)) if np.isfinite(np.nanmin(z_vals)) else 0.0
+            vmax = float(np.nanmax(z_vals)) if np.isfinite(np.nanmax(z_vals)) else 1.0
+            if vmin == vmax:
+                vmax = vmin + 1.0
+        
+        # Purples colormap for recombinants
+        recomb_colorscale = [
+            [0.0, "#f2f0f7"], 
+            [0.2, "#dadaeb"], 
+            [0.4, "#bcbddc"], 
+            [0.6, "#9e9ac8"], 
+            [0.8, "#756bb1"], 
+            [1.0, "#54278f"]
+        ]
+        
+        fig.add_trace(
+            go.Choropleth(
+                locations=valid["Country_standard"],
+                locationmode="country names",
+                z=z_vals,
+                zmin=vmin,
+                zmax=vmax,
+                colorscale=recomb_colorscale,
+                colorbar=dict(
+                    title="Log10 Recombinants",
+                    len=0.6,
+                    thickness=20,
+                    tickvals=[0, 1, 2, 3] if vmax > 1 else [0, 0.5, 1],
+                    ticktext=[f"10^{x}" for x in [0, 1, 2, 3]] if vmax > 1 else ["1", "3", "10"]
+                ) if not np.all(z_vals == 0) else None,
+                showscale=not np.all(z_vals == 0),
+                marker_line_color="rgba(0,0,0,0.3)",
+                marker_line_width=0.5,
+                hovertext=valid.apply(
+                    lambda r: f"<b>{r['Country_standard']}</b><br>Recombinants: {float(r['Metric_raw']):.2f}",
+                    axis=1,
+                ),
+                hoverinfo="text",
             )
         )
     
@@ -2909,7 +2964,8 @@ def create_dashboard_layout():
                                         options=[
                                             {"label": " Sequences", "value": "sequences"},
                                             {"label": " Coverage", "value": "coverage"}, 
-                                            {"label": "Epidemiology", "value": "epidemiology"},
+                                            {"label": " Epidemiology", "value": "epidemiology"},
+                                            {"label": " Recombinants", "value": "recombinants"},
                                         ],
                                         value="sequences",
                                         inline=True,
@@ -3272,6 +3328,44 @@ def create_dashboard_layout():
                     ], className="shadow-sm")
                 ], width=12)
             ], className="mb-4"),
+
+            # ROW 9: Recombination Analysis
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5("🧬 Recombination Event Analysis", className="card-title fw-bold text-primary mb-3"),
+                            dbc.Row([
+                                # Col 1: Breakpoint Density Plot
+                                dbc.Col([
+                                    dbc.Card([
+                                        dbc.CardBody([
+                                            html.H6("Breakpoint Frequency Density Across Genome", className="card-subtitle mb-2 text-muted"),
+                                            dcc.Loading(
+                                                dcc.Graph(id="recomb-breakpoint-density"),
+                                                type="circle"
+                                            )
+                                        ])
+                                    ], className="h-100 shadow-sm border-light")
+                                ], width=6),
+                                
+                                # Col 2: Recombination Details Table
+                                dbc.Col([
+                                    dbc.Card([
+                                        dbc.CardBody([
+                                            html.H6("Validated Recombination Details Table", className="card-subtitle mb-2 text-muted"),
+                                            dcc.Loading(
+                                                html.Div(id="recomb-details-table-container"),
+                                                type="circle"
+                                            )
+                                        ])
+                                    ], className="h-100 shadow-sm border-light")
+                                ], width=6),
+                            ], className="g-3")
+                        ])
+                    ], className="shadow-sm border-0 mb-4")
+                ], width=12)
+            ], id="recomb-section-row", className="mb-4", style={"display": "none"}),
         ]),
 
         # === TAB 2: MUTATIONS CONTENT (HIDDEN BY DEFAULT) ===
@@ -4524,6 +4618,7 @@ def get_hev_no_mutation_content():
     Input("filtered-store", "data"),
     Input("selected-virus", "data"),
 )
+@cache.memoize(timeout=86400)
 def render_line(filtered_json, virus):
     df = _df_from_json(filtered_json)
     if df.empty:
@@ -4542,6 +4637,7 @@ def render_line(filtered_json, virus):
     Input("selected-virus", "data"),
     Input("display-mode", "value"),
 )
+@cache.memoize(timeout=86400)
 def render_genotype_bar(filtered_json, virus, display_mode):
     store = get_data_store()
     
@@ -4580,6 +4676,7 @@ def render_genotype_bar(filtered_json, virus, display_mode):
     State("continent-dropdown", "value"),
     State("country-dropdown", "value"),
 )
+@cache.memoize(timeout=86400)
 def render_map(filtered_json, gap_json, ihme_json, virus, display_mode, map_mode, 
                ihme_metric, regions, countries):
     selected_virus = (virus or "HBV")
@@ -4625,6 +4722,52 @@ def render_map(filtered_json, gap_json, ihme_json, virus, display_mode, map_mode
         title = f"{selected_virus} Burden-adjusted Sequencing Coverage"
         subtitle = "Coverage = sequences / estimated infections"
     
+        return fig, title, subtitle, epi_controls_style
+
+    # MODE 1.5: Recombinants map
+    elif map_mode == "recombinants":
+        recomb_only = filtered[filtered["is_recombinant"] == "true"]
+        
+        if display_mode == "PerMillion":
+            if not recomb_only.empty and "Population" in data and not data["population_df"].empty:
+                pop_data = data["population_df"]
+                country_data = recomb_only.groupby("Country_standard").size().reset_index(name="count")
+                country_data = country_data.merge(
+                    pop_data[["Country_standard", "Population"]].drop_duplicates(),
+                    on="Country_standard",
+                    how="left"
+                )
+                country_data["Metric_raw"] = (country_data["count"] / country_data["Population"]) * 1_000_000
+            else:
+                country_data = recomb_only.groupby("Country_standard").size().reset_index(name="Metric_raw")
+        else:
+            country_data = recomb_only.groupby("Country_standard").size().reset_index(name="Metric_raw")
+            
+        # Group counts of recombination classes per country for bubble charts
+        country_genotype_counts = recomb_only.groupby(["Country_standard", "recombination_class"]).size().reset_index(name="Count")
+        country_genotype_counts = country_genotype_counts.rename(columns={"recombination_class": "genotype"})
+        country_genotype_counts["genotype"] = country_genotype_counts["genotype"].replace({
+            "inter_genotypic": "Inter-genotypic",
+            "intra_genotypic": "Intra-genotypic",
+            "intra_subtype": "Intra-subtype",
+            "unknown": "Unknown Class"
+        })
+        
+        fig = create_world_map(
+            country_data,
+            country_genotype_counts,
+            data["coord_lookup"],
+            virus_type=selected_virus,
+            display_mode="recombinants"
+        )
+        
+        if display_mode == "PerMillion":
+            title = f"{selected_virus} Validated Recombinants Map"
+            subtitle = "Recombinants per million population"
+        else:
+            title = f"{selected_virus} Validated Recombinants Map"
+            subtitle = "Recombinants (count)"
+            
         return fig, title, subtitle, epi_controls_style
 
     # MODE 2: Epidemiology map (IHME data)
@@ -5093,6 +5236,7 @@ def update_mutation_category_options(virus, mutation_type):
     Input("mutation-category-filter", "value"),
     Input("mutation-top-n", "value"),
 )
+@cache.memoize(timeout=86400)
 def update_mutation_frequency_chart(filtered_json, virus, mutation_type, category, top_n):
     data = get_data_store()
     selected_virus = virus or "HBV"
@@ -5474,6 +5618,7 @@ def download_mutation_data(n_clicks, filtered_json, virus, mutation_type, catego
     Input("country-dropdown", "value"),
     Input("correlation-sex", "value"),
 )
+@cache.memoize(timeout=86400)
 def update_forecast_chart(virus, regions, countries, sex):
     data = get_data_store()
     return create_forecast_chart(
@@ -5518,6 +5663,7 @@ def update_mutation_timeline(virus, filtered_json, top_n):
     Input("country-dropdown", "value"),
     Input("top-countries-count", "value"),  # ADD THIS
 )
+@cache.memoize(timeout=86400)
 def update_country_stacked_bar_callback(filtered_json, virus, regions, countries, top_n):
     df = _df_from_json(filtered_json)
     return create_country_stacked_bar(df, virus or "HBV", regions, countries, top_n=top_n or 15)
@@ -5529,6 +5675,7 @@ def update_country_stacked_bar_callback(filtered_json, virus, regions, countries
     Input("gap-store", "data"),
     Input("selected-virus", "data"),
 )
+@cache.memoize(timeout=86400)
 def update_priority_ranking_responsive(gap_json, virus):
     gap_df = _df_from_json(gap_json)
     data = get_data_store()
@@ -5643,6 +5790,7 @@ def update_correlation_age_options(virus, metric):
     Input("country-dropdown", "value"),
     Input("epi-display-mode", "value"),
 )
+@cache.memoize(timeout=86400)
 def update_global_burden_timeline(virus, metric, age_group, sex, regions, countries, display_mode):
     data = get_data_store()
     ihme_df = data["ihme_df"]
@@ -5764,6 +5912,7 @@ def update_global_burden_timeline(virus, metric, age_group, sex, regions, countr
     Input("continent-dropdown", "value"),
     Input("top-countries-n", "value"),
 )
+@cache.memoize(timeout=86400)
 def update_top_countries_burden(virus, metric, age_group, sex, regions, top_n):
     data = get_data_store()
     ihme_df = data["ihme_df"]
@@ -7364,3 +7513,161 @@ def reset_time_range(n_clicks, selected_virus):
     max_year = int(df["Year"].max())
     
     return [min_year, max_year]
+
+
+# Callback to update the lower Recombination section
+@callback(
+    Output("recomb-breakpoint-density", "figure"),
+    Output("recomb-details-table-container", "children"),
+    Output("recomb-section-row", "style"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data"),
+)
+@cache.memoize(timeout=86400)
+def update_recomb_section(filtered_json, virus):
+    df = _df_from_json(filtered_json)
+    selected_virus = (virus or "HBV").upper()
+    data = get_data_store()
+    
+    # Filter for validated recombinants of the currently filtered dataset
+    if df.empty or "is_recombinant" not in df.columns:
+        return go.Figure(), html.Div("No data available"), {"display": "none"}
+        
+    recomb_seqs = df[df["is_recombinant"] == "true"]
+    if recomb_seqs.empty:
+        return go.Figure(), html.Div("No recombination events found for current selection"), {"display": "none"}
+        
+    # Get the raw recombinants table from store to query breakpoints
+    recomb_df = data.get(f"{selected_virus.lower()}_recombs", pd.DataFrame())
+    if recomb_df.empty:
+        return go.Figure(), html.Div("No recombination event coordinates found"), {"display": "none"}
+        
+    # Merge coordinates with the filtered sequence set
+    from data_loader import normalize_accession_id
+    recomb_df["ID_norm"] = recomb_df["ID"].apply(normalize_accession_id)
+    recomb_seqs["ID_norm"] = recomb_seqs["ID"].apply(normalize_accession_id)
+    
+    merged_recombs = recomb_df.merge(recomb_seqs[["ID_norm"]], on="ID_norm", how="inner")
+    if merged_recombs.empty:
+        return go.Figure(), html.Div("No recombination details match filters"), {"display": "none"}
+        
+    # 1. CREATE BREAKPOINT DENSITY PLOT
+    fig = go.Figure()
+    
+    merged_recombs["breakpoint_start"] = pd.to_numeric(merged_recombs["breakpoint_start"], errors="coerce")
+    merged_recombs["breakpoint_end"] = pd.to_numeric(merged_recombs["breakpoint_end"], errors="coerce")
+    
+    valid_coords = merged_recombs.dropna(subset=["breakpoint_start", "breakpoint_end"])
+    
+    if selected_virus == "HBV":
+        genome_length = 3200
+        nbins = 32
+    elif selected_virus == "HCV":
+        genome_length = 9600
+        nbins = 96
+    else:
+        genome_length = 7200
+        nbins = 72
+        
+    if not valid_coords.empty:
+        fig.add_trace(go.Histogram(
+            x=valid_coords["breakpoint_start"],
+            name="Breakpoint Start",
+            xbins=dict(start=0, end=genome_length, size=genome_length/nbins),
+            marker_color="#d62728",
+            opacity=0.6,
+            hovertemplate="Position: %{x} bp<br>Count: %{y}<extra></extra>"
+        ))
+        fig.add_trace(go.Histogram(
+            x=valid_coords["breakpoint_end"],
+            name="Breakpoint End",
+            xbins=dict(start=0, end=genome_length, size=genome_length/nbins),
+            marker_color="#1f77b4",
+            opacity=0.6,
+            hovertemplate="Position: %{x} bp<br>Count: %{y}<extra></extra>"
+        ))
+        
+    fig.update_layout(
+        barmode="overlay",
+        xaxis=dict(title="Genome Position (bp)", range=[0, genome_length]),
+        yaxis=dict(title="Frequency"),
+        margin=dict(l=40, r=20, t=20, b=40),
+        legend=dict(x=0.8, y=0.95, bgcolor="rgba(255,255,255,0.5)"),
+        height=350,
+        hovermode="closest"
+    )
+    
+    # 2. CREATE DETAILS TABLE
+    display_df = merged_recombs[[
+        "ID", "genotype", "recombination_class", 
+        "parent_1", "parent_2", 
+        "breakpoint_start", "breakpoint_end", "p_value"
+    ]].copy()
+    
+    display_df["recombination_class"] = display_df["recombination_class"].replace({
+        "inter_genotypic": "Inter-genotypic",
+        "intra_genotypic": "Intra-genotypic",
+        "intra_subtype": "Intra-subtype",
+        "unknown": "Unknown"
+    })
+    
+    display_df["parent_1"] = display_df["parent_1"].apply(lambda p: str(p).replace("ref_", ""))
+    display_df["parent_2"] = display_df["parent_2"].apply(lambda p: str(p).replace("ref_", ""))
+    
+    def format_pval(p):
+        try:
+            val = float(p)
+            return f"{val:.3e}"
+        except:
+            return str(p)
+    display_df["p_value"] = display_df["p_value"].apply(format_pval)
+    
+    display_df.columns = [
+        "Accession ID", "Genotype", "Class", 
+        "Parent 1 Ref", "Parent 2 Ref", 
+        "BP Start", "BP End", "p-value"
+    ]
+    
+    from dash import dash_table
+    table = dash_table.DataTable(
+        data=display_df.to_dict("records"),
+        columns=[{"name": i, "id": i} for i in display_df.columns],
+        page_size=8,
+        sort_action="native",
+        filter_action="native",
+        style_table={'overflowX': 'auto', 'minWidth': '100%'},
+        style_cell={
+            'textAlign': 'left',
+            'padding': '10px',
+            'fontFamily': 'Inter, sans-serif',
+            'fontSize': '13px'
+        },
+        style_header={
+            'backgroundColor': '#212529',
+            'color': 'white',
+            'fontWeight': 'bold',
+            'fontSize': '14px',
+            'border': '1px solid #373b3e'
+        },
+        style_data_conditional=[
+            {
+                'if': {'row_index': 'odd'},
+                'backgroundColor': '#f8f9fa'
+            },
+            {
+                'if': {'column_id': 'Class', 'filter_query': '{Class} eq "Inter-genotypic"'},
+                'color': '#856404',
+                'backgroundColor': '#fff3cd',
+                'fontWeight': 'bold'
+            },
+            {
+                'if': {'column_id': 'Class', 'filter_query': '{Class} eq "Intra-subtype"'},
+                'color': '#155724',
+                'backgroundColor': '#d4edda',
+                'fontWeight': 'bold'
+            }
+        ],
+        className="table table-hover table-striped border rounded"
+    )
+    
+    return fig, table, {"display": "block"}
