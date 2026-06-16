@@ -66,6 +66,7 @@ def analyze_recomb_types(virus):
         clean_id = seq_id.replace("ref_", "")
         anno_map[seq_id] = row[geno_col]
         anno_map[clean_id] = row[geno_col]
+        anno_map[f"ref_{clean_id}"] = row[geno_col]
 
     # Load validated recombinants
     rec_df = pd.read_csv(recomb_file, sep="\t")
