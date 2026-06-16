@@ -3894,7 +3894,7 @@ def compute_filtered_store(virus, years, regions, countries, genotypes):
     if genotypes:
         df = df[df["genotype"].isin(genotypes)]
 
-    light = df[["Country_standard", "WHO_Regions", "Year", "genotype", "recombination_class"]].copy()
+    light = df[["ID", "Country_standard", "WHO_Regions", "Year", "genotype", "is_recombinant", "recombination_class"]].copy()
     return _df_to_json(light)
 
 
@@ -4726,7 +4726,7 @@ def render_map(filtered_json, gap_json, ihme_json, virus, display_mode, map_mode
 
     # MODE 1.5: Recombinants map
     elif map_mode == "recombinants":
-        recomb_only = filtered[filtered["is_recombinant"] == "true"]
+        recomb_only = filtered[filtered["is_recombinant"].astype(str).str.lower() == "true"]
         
         if display_mode == "PerMillion":
             if not recomb_only.empty and "Population" in data and not data["population_df"].empty:
@@ -7533,7 +7533,7 @@ def update_recomb_section(filtered_json, virus):
     if df.empty or "is_recombinant" not in df.columns:
         return go.Figure(), html.Div("No data available"), {"display": "none"}
         
-    recomb_seqs = df[df["is_recombinant"] == "true"]
+    recomb_seqs = df[df["is_recombinant"].astype(str).str.lower() == "true"]
     if recomb_seqs.empty:
         return go.Figure(), html.Div("No recombination events found for current selection"), {"display": "none"}
         
