@@ -2939,7 +2939,45 @@ def create_dashboard_layout():
                 ], width=9)
             ], className="mb-4"),
             
-            # ROW 2: Time Series
+            # ROW 2: Burden Forecast and Sequencing Priority
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5("Burden Forecast with Projections", className="mb-3"),
+                            dcc.Loading(
+                                dcc.Graph(id="forecast-chart"),
+                                type="circle"
+                            )
+                        ])
+                    ], className="h-100 shadow-sm")
+                ], width=6),
+                
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5("Sequencing Priority Ranking", className="mb-3"),
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Button(
+                                        "Download Priority Table (CSV)",
+                                        id="priority-download-btn",
+                                        color="secondary",
+                                        className="ms-2"
+                                    ),
+                                    dcc.Download(id="priority-download")
+                                ], width="auto"),
+                            ], className="g-3 mb-2"),
+                            dcc.Loading(
+                                dcc.Graph(id="priority-ranking"),
+                                type="circle"
+                            )
+                        ])
+                    ], className="h-100 shadow-sm")
+                ], width=6),
+            ], className="mb-4"),
+            
+            # ROW 3: Time Series (HBV Whole Genomes Per Year)
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -2954,7 +2992,7 @@ def create_dashboard_layout():
                 ], width=12),           
             ], className="mb-4"),        
             
-            # ROW 3: genotype and Country Distribution
+            # ROW 4: Genotype and Country Distribution
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -2993,7 +3031,34 @@ def create_dashboard_layout():
                 ], width=6)
             ], className="mb-4"),
             
-            # ROW 4: Epidemiology Summary
+            # ROW 5: Mutation Timeline
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5("Mutation Timeline", className="mb-3"),
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Label("Top N Mutations:", className="fw-bold me-2"),
+                                    dcc.Dropdown(
+                                        id="top-mutations-count",
+                                        options=[{"label": str(i), "value": i} for i in [5, 10, 15, 20]],
+                                        value=10,
+                                        clearable=False,
+                                        style={"width": "150px"}
+                                    )
+                                ], width="auto")
+                            ], className="mb-2"),
+                            dcc.Loading(
+                                dcc.Graph(id="mutation-timeline"),
+                                type="circle"
+                            )
+                        ])
+                    ], className="h-100 shadow-sm")
+                ], width=12)
+            ], className="mb-4"),
+            
+            # ROW 6: Epidemiology Summary
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -3131,7 +3196,7 @@ def create_dashboard_layout():
                 ], width=12)
             ], id="epidemiology-summary-row", className="mb-4"),
             
-            # ROW 5: Mutation Summary
+            # ROW 7: Mutation Summary
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -3143,7 +3208,7 @@ def create_dashboard_layout():
                 ], width=12)
             ], className="mb-4", id="mutation-summary-row"),
             
-            # ROW 6: Quick Actions (New section)
+            # ROW 8: Quick Actions (New section)
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -3276,31 +3341,7 @@ def create_dashboard_layout():
                 ], width=4),
             ], className="mb-4"),
             
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Mutation Timeline", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("Top N Mutations:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="top-mutations-count",
-                                        options=[{"label": str(i), "value": i} for i in [5, 10, 15, 20]],
-                                        value=10,
-                                        clearable=False,
-                                        style={"width": "150px"}
-                                    )
-                                ], width="auto")
-                            ], className="mb-2"),
-                            dcc.Loading(
-                                dcc.Graph(id="mutation-timeline"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=12)
-            ], className="mb-4"),
+
             
             # Mutation Details Table
             dbc.Row([
@@ -3402,20 +3443,8 @@ def create_dashboard_layout():
                 ], width=12)
             ], className="mb-4"),
             
-            # ROW 1: Global Burden Forecast and Top Countries
+            # ROW 1: Top Countries by Burden
             dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Burden Forecast with Projections", className="mb-3"),
-                            dcc.Loading(
-                                dcc.Graph(id="forecast-chart"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=8),
-                
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
@@ -3438,7 +3467,7 @@ def create_dashboard_layout():
                             )
                         ])
                     ], className="h-100 shadow-sm")
-                ], width=4),
+                ], width=12),
             ], className="mb-4"),
             
             # ROW 2: Age and Sex Analysis
@@ -3557,31 +3586,8 @@ def create_dashboard_layout():
                 ], width=6),
             ], className="mb-4"),
             
-            # ROW 4: Sequencing Priority and Correlation
+            # ROW 4: Burden vs. Sequencing Correlation
             dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Sequencing Priority Ranking", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Button(
-                                        "Download Priority Table (CSV)",
-                                        id="priority-download-btn",
-                                        color="secondary",
-                                        className="ms-2"
-                                    ),
-                                    dcc.Download(id="priority-download")
-                                ], width="auto"),
-                            ], className="g-3 mb-2"),
-                            dcc.Loading(
-                                dcc.Graph(id="priority-ranking"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=6),
-                
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
@@ -3631,7 +3637,7 @@ def create_dashboard_layout():
                             )
                         ])
                     ], className="h-100 shadow-sm")
-                ], width=6),
+                ], width=12),
             ], className="mb-4"),
             
             # Data Table
