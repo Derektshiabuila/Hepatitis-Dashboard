@@ -341,7 +341,7 @@ def main():
         "tree_passed": 0
     }
     
-    scratch_dir = Path("scratch/recomb_val")
+    scratch_dir = Path(f"scratch/recomb_val_{virus}")
     scratch_dir.mkdir(parents=True, exist_ok=True)
     
     warned_missing_paths = set()
