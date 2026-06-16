@@ -3800,7 +3800,7 @@ def compute_filtered_store(virus, years, regions, countries, genotypes):
     if genotypes:
         df = df[df["genotype"].isin(genotypes)]
 
-    light = df[["Country_standard", "WHO_Regions", "Year", "genotype"]].copy()
+    light = df[["Country_standard", "WHO_Regions", "Year", "genotype", "recombination_class"]].copy()
     return _df_to_json(light)
 
 
