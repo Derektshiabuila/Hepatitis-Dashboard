@@ -762,6 +762,12 @@ def create_world_map(
     
     df = country_data.copy()
     
+    # Count of recombinants per country
+    recomb_counts = {}
+    if not country_genotype_counts.empty:
+        recomb_df = country_genotype_counts[country_genotype_counts["genotype"] == "Recombinant"]
+        recomb_counts = dict(zip(recomb_df["Country_standard"], recomb_df["Count"]))
+    
     # Ensure we have Metric_raw column
     if "Metric_raw" not in df.columns:
         # Try to find alternative columns
@@ -918,8 +924,11 @@ def create_world_map(
                 colorbar_title="Log10 per million",
                 marker_line_color="rgba(0,0,0,0.3)",
                 marker_line_width=0.5,
-                hovertemplate="<b>%{location}</b><br>Per million: %{customdata:.2f}<extra></extra>",
-                customdata=valid["Metric_raw"].astype(float),
+                hovertext=valid.apply(
+                    lambda r: f"<b>{r['Country_standard']}</b><br>Per million: {float(r['Metric_raw']):.2f}<br>Recombinants: {int(recomb_counts.get(r['Country_standard'], 0))}",
+                    axis=1,
+                ),
+                hoverinfo="text",
             )
         )
     
@@ -969,7 +978,7 @@ def create_world_map(
                 marker_line_color="rgba(0,0,0,0.3)",
                 marker_line_width=0.5,
                 hovertext=driving.apply(
-                    lambda r: f"<b>{r['Country_standard']}</b><br>Exact count: {float(r['Metric_raw']):.0f}<br>Range: {r['bin']}",
+                    lambda r: f"<b>{r['Country_standard']}</b><br>Exact count: {float(r['Metric_raw']):.0f}<br>Range: {r['bin']}<br>Recombinants: {int(recomb_counts.get(r['Country_standard'], 0))}",
                     axis=1,
                 ),
                 hoverinfo="text",
@@ -2713,6 +2722,24 @@ def build_indicators(virus):
                     dbc.Row([
                         dbc.Col([
                             dbc.CardBody([
+                                html.H6("Recombinants"),
+                                html.H4(id="indicator-recombinants")
+                            ])
+                        ], width=10),
+                        dbc.Col([
+                            html.Div([
+                                html.I(className="bi bi-shuffle", style={"fontSize": "2rem"})
+                            ], className=f"d-flex align-items-center justify-content-center {color_class} text-white h-100")
+                        ], width=2)
+                    ], className="g-0")
+                ], className="mb-4 shadow-sm")
+            ], width=12),
+
+            dbc.Col([
+                dbc.Card([
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.CardBody([
                                 html.H6("Years"),
                                 html.H4(id="indicator-years")
                             ])
@@ -3854,6 +3881,7 @@ def compute_ihme_latest_store(virus, metric, years, regions, countries, sex):
     Output("indicator-total", "children"),
     Output("indicator-countries", "children"),
     Output("indicator-genotypes", "children"),
+    Output("indicator-recombinants", "children"),
     Output("indicator-years", "children"),
     Input("filtered-store", "data"),
     Input("year-slider", "value"),
@@ -3861,28 +3889,25 @@ def compute_ihme_latest_store(virus, metric, years, regions, countries, sex):
 def update_indicators(filtered_json, selected_years):
     df = _df_from_json(filtered_json)
     if df is None or df.empty:
-        return "0", "0", "0", "N/A"
+        return "0", "0", "0", "0", "N/A"
 
     # Totals
     total_genomes = len(df)
     unique_countries = df.get("Country_standard", pd.Series(dtype="object")).nunique()
 
-    # Genotypes: exclude recombinants from the count, but flag presence
+    # Genotypes: exclude recombinants from count
     g = df.get("genotype", pd.Series(dtype="object")).astype("string").str.strip()
-    recomb_mask = g.str.contains(r"recomb", case=False, na=False)  # catches 'Recombinant', 'Recombinants', etc.
-    base_genotype_count = g[~recomb_mask].dropna().nunique()
-    has_recomb = bool(recomb_mask.any())
+    base_genotypes = g[g != "Recombinant"].dropna()
+    base_genotype_count = base_genotypes.nunique()
 
-    if has_recomb:
-        genotypes_text = f"{base_genotype_count} + Recombinants"
-    else:
-        genotypes_text = f"{base_genotype_count}"
+    # Recombinants count
+    recomb_count = (g == "Recombinant").sum()
 
     # Years label
     years_text = f"{selected_years[0]} - {selected_years[1]}" \
         if selected_years and len(selected_years) == 2 else "All years"
 
-    return f"{total_genomes:,}", str(unique_countries), genotypes_text, years_text
+    return f"{total_genomes:,}", str(unique_countries), f"{base_genotype_count}", f"{recomb_count:,}", years_text
 
 
 @callback(

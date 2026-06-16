@@ -497,6 +497,9 @@ def load_and_preprocess_data():
         "results/hbv/final_resistance.tsv",
         "results/hcv/final_resistance.tsv",
         "results/hev/final_resistance.tsv",
+        "results/hbv/validated_recombinants.tsv",
+        "results/hcv/validated_recombinants.tsv",
+        "results/hev/validated_recombinants.tsv",
         "data/population_by_country_year.csv",
         "data/IHME-GBD_2021_DATA-9e7ec2c0-1.csv",
         "data/WHO_regions_countries_coordinates.txt"
@@ -631,6 +634,48 @@ def load_and_preprocess_data():
             hev_data["genotype"] = hev_data["genotype"].apply(
                 lambda g: normalize_genotype_label(g, virus="HEV")
             )
+
+        # --- Merge validated recombinants data ---
+        def merge_recombinants_data(df, virus):
+            recomb_file = f"results/{virus}/validated_recombinants.tsv"
+            recomb_path = get_data_path(recomb_file)
+            if os.path.exists(recomb_path):
+                print(f"🧬 Loading validated recombinants for {virus.upper()}...")
+                try:
+                    rec_df = pd.read_csv(recomb_path, sep="\t", dtype=str)
+                    id_col = None
+                    for col in ["sequence_id", "accession", "ID", "sample", "Sample"]:
+                        if col in rec_df.columns:
+                            id_col = col
+                            break
+                    if id_col:
+                        rec_df = rec_df.rename(columns={id_col: "ID"})
+                        rec_df["ID"] = rec_df["ID"].apply(normalize_accession_id)
+                        if "is_recombinant" not in rec_df.columns:
+                            rec_df["is_recombinant"] = "true"
+                        else:
+                            rec_df["is_recombinant"] = rec_df["is_recombinant"].fillna("true").astype(str).str.lower()
+                        
+                        df = df.merge(rec_df[["ID", "is_recombinant"]].drop_duplicates("ID"), on="ID", how="left")
+                    else:
+                        df["is_recombinant"] = "false"
+                except Exception as e:
+                    print(f"❌ Error loading recombinants for {virus}: {e}")
+                    df["is_recombinant"] = "false"
+            else:
+                df["is_recombinant"] = "false"
+            
+            df["is_recombinant"] = df["is_recombinant"].fillna("false")
+            return df
+
+        hbv_data = merge_recombinants_data(hbv_data, "hbv")
+        hcv_data = merge_recombinants_data(hcv_data, "hcv")
+        hev_data = merge_recombinants_data(hev_data, "hev")
+        
+        # Override genotype to "Recombinant" for validated recombinants
+        for df in [hbv_data, hcv_data, hev_data]:
+            if not df.empty and "is_recombinant" in df.columns:
+                df.loc[df["is_recombinant"] == "true", "genotype"] = "Recombinant"
 
         
         # Only process non-empty dataframes
