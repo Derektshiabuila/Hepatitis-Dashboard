@@ -23,7 +23,6 @@ register_page(__name__, path="/dashboard", name="Dashboard")
 
 # Import data loading functions
 from data_loader import load_and_preprocess_data
-from cache_config import cache
 from user_sequence_analysis import (
     USER_SEQ_STORES,
     user_seq_tab_button,
@@ -50,39 +49,26 @@ data_store = None
 def get_data_store():
     """Helper function to access the global data store"""
     global data_store
-    if data_store is not None:
-        return data_store
-
-    import flask
-    try:
-        if flask.has_app_context() and "DATA_STORE" in flask.current_app.config:
-            data_store = flask.current_app.config["DATA_STORE"]
-            if data_store is not None:
-                print("Data store retrieved from flask.current_app.config")
-                return data_store
-    except Exception as e:
-        print(f"Failed to access flask config: {e}")
-
-    try:
-        from data_loader import load_and_preprocess_data
-        data_store = load_and_preprocess_data()
-        print("Data store loaded successfully")
-    except Exception as e:
-        print(f"Error loading data: {e}")
-        # Create empty data store structure to prevent further errors
-        data_store = {
-            'hbv_data': pd.DataFrame(),
-            'hcv_data': pd.DataFrame(),
-            'hev_data': pd.DataFrame(),
-            'ihme_df': pd.DataFrame(),
-            'population_df': pd.DataFrame(),
-            'coord_lookup': {},
-            'hbv_mut': pd.DataFrame(),
-            'hcv_mut': pd.DataFrame(),
-            'hev_mut': pd.DataFrame()
-        }
+    if data_store is None:
+        try:
+            from data_loader import load_and_preprocess_data
+            data_store = load_and_preprocess_data()
+            print("Data store loaded successfully")
+        except Exception as e:
+            print(f"Error loading data: {e}")
+            # Create empty data store structure to prevent further errors
+            data_store = {
+                'hbv_data': pd.DataFrame(),
+                'hcv_data': pd.DataFrame(),
+                'hev_data': pd.DataFrame(),
+                'ihme_df': pd.DataFrame(),
+                'population_df': pd.DataFrame(),
+                'coord_lookup': {},
+                'hbv_mut': pd.DataFrame(),
+                'hcv_mut': pd.DataFrame(),
+                'hev_mut': pd.DataFrame()
+            }
     return data_store
-
 
 # === CONFIG & CONSTANTS ======================================================
 HBV_GENOTYPE_COLORS = {
@@ -763,12 +749,6 @@ def create_world_map(
     
     df = country_data.copy()
     
-    # Count of recombinants per country
-    recomb_counts = {}
-    if not country_genotype_counts.empty:
-        recomb_df = country_genotype_counts[country_genotype_counts["genotype"] == "Recombinant"]
-        recomb_counts = dict(zip(recomb_df["Country_standard"], recomb_df["Count"]))
-    
     # Ensure we have Metric_raw column
     if "Metric_raw" not in df.columns:
         # Try to find alternative columns
@@ -890,60 +870,6 @@ def create_world_map(
             )
         )
     
-    # RECOMBINANTS MODE
-    elif display_mode == "recombinants":
-        # Calculate log10 values for choropleth if we have counts > 0
-        z_vals = (
-            valid["Metric_raw"].apply(lambda x: np.log10(x) if (pd.notna(x) and x > 0) else np.nan)
-            .astype(float)
-            .to_numpy()
-        )
-        if np.all(np.isnan(z_vals)):
-            # Fallback to zeros/no data if no recombinants found
-            z_vals = np.zeros(len(valid))
-            vmin, vmax = 0, 1
-        else:
-            vmin = float(np.nanmin(z_vals)) if np.isfinite(np.nanmin(z_vals)) else 0.0
-            vmax = float(np.nanmax(z_vals)) if np.isfinite(np.nanmax(z_vals)) else 1.0
-            if vmin == vmax:
-                vmax = vmin + 1.0
-        
-        # Purples colormap for recombinants
-        recomb_colorscale = [
-            [0.0, "#f2f0f7"], 
-            [0.2, "#dadaeb"], 
-            [0.4, "#bcbddc"], 
-            [0.6, "#9e9ac8"], 
-            [0.8, "#756bb1"], 
-            [1.0, "#54278f"]
-        ]
-        
-        fig.add_trace(
-            go.Choropleth(
-                locations=valid["Country_standard"],
-                locationmode="country names",
-                z=z_vals,
-                zmin=vmin,
-                zmax=vmax,
-                colorscale=recomb_colorscale,
-                colorbar=dict(
-                    title="Log10 Recombinants",
-                    len=0.6,
-                    thickness=20,
-                    tickvals=[0, 1, 2, 3] if vmax > 1 else [0, 0.5, 1],
-                    ticktext=[f"10^{x}" for x in [0, 1, 2, 3]] if vmax > 1 else ["1", "3", "10"]
-                ) if not np.all(z_vals == 0) else None,
-                showscale=not np.all(z_vals == 0),
-                marker_line_color="rgba(0,0,0,0.3)",
-                marker_line_width=0.5,
-                hovertext=valid.apply(
-                    lambda r: f"<b>{r['Country_standard']}</b><br>Recombinants: {float(r['Metric_raw']):.2f}",
-                    axis=1,
-                ),
-                hoverinfo="text",
-            )
-        )
-    
     # PER MILLION MODE
     elif display_mode == "PerMillion":
         # [Keep existing PerMillion code as is]
@@ -979,11 +905,8 @@ def create_world_map(
                 colorbar_title="Log10 per million",
                 marker_line_color="rgba(0,0,0,0.3)",
                 marker_line_width=0.5,
-                hovertext=valid.apply(
-                    lambda r: f"<b>{r['Country_standard']}</b><br>Per million: {float(r['Metric_raw']):.2f}<br>Recombinants: {int(recomb_counts.get(r['Country_standard'], 0))}",
-                    axis=1,
-                ),
-                hoverinfo="text",
+                hovertemplate="<b>%{location}</b><br>Per million: %{customdata:.2f}<extra></extra>",
+                customdata=valid["Metric_raw"].astype(float),
             )
         )
     
@@ -1033,7 +956,7 @@ def create_world_map(
                 marker_line_color="rgba(0,0,0,0.3)",
                 marker_line_width=0.5,
                 hovertext=driving.apply(
-                    lambda r: f"<b>{r['Country_standard']}</b><br>Exact count: {float(r['Metric_raw']):.0f}<br>Range: {r['bin']}<br>Recombinants: {int(recomb_counts.get(r['Country_standard'], 0))}",
+                    lambda r: f"<b>{r['Country_standard']}</b><br>Exact count: {float(r['Metric_raw']):.0f}<br>Range: {r['bin']}",
                     axis=1,
                 ),
                 hoverinfo="text",
@@ -2777,24 +2700,6 @@ def build_indicators(virus):
                     dbc.Row([
                         dbc.Col([
                             dbc.CardBody([
-                                html.H6("Recombinants"),
-                                html.Div(id="indicator-recombinants")
-                            ])
-                        ], width=10),
-                        dbc.Col([
-                            html.Div([
-                                html.I(className="bi bi-shuffle", style={"fontSize": "2rem"})
-                            ], className=f"d-flex align-items-center justify-content-center {color_class} text-white h-100")
-                        ], width=2)
-                    ], className="g-0")
-                ], className="mb-4 shadow-sm")
-            ], width=12),
-
-            dbc.Col([
-                dbc.Card([
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.CardBody([
                                 html.H6("Years"),
                                 html.H4(id="indicator-years")
                             ])
@@ -2964,8 +2869,7 @@ def create_dashboard_layout():
                                         options=[
                                             {"label": " Sequences", "value": "sequences"},
                                             {"label": " Coverage", "value": "coverage"}, 
-                                            {"label": " Epidemiology", "value": "epidemiology"},
-                                            {"label": " Recombinants", "value": "recombinants"},
+                                            {"label": "Epidemiology", "value": "epidemiology"},
                                         ],
                                         value="sequences",
                                         inline=True,
@@ -3022,45 +2926,7 @@ def create_dashboard_layout():
                 ], width=9)
             ], className="mb-4"),
             
-            # ROW 2: Burden Forecast and Sequencing Priority
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Burden Forecast with Projections", className="mb-3"),
-                            dcc.Loading(
-                                dcc.Graph(id="forecast-chart"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=6),
-                
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Sequencing Priority Ranking", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Button(
-                                        "Download Priority Table (CSV)",
-                                        id="priority-download-btn",
-                                        color="secondary",
-                                        className="ms-2"
-                                    ),
-                                    dcc.Download(id="priority-download")
-                                ], width="auto"),
-                            ], className="g-3 mb-2"),
-                            dcc.Loading(
-                                dcc.Graph(id="priority-ranking"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=6),
-            ], className="mb-4"),
-            
-            # ROW 3: Time Series (HBV Whole Genomes Per Year)
+            # ROW 2: Time Series
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -3075,7 +2941,7 @@ def create_dashboard_layout():
                 ], width=12),           
             ], className="mb-4"),        
             
-            # ROW 4: Genotype and Country Distribution
+            # ROW 3: genotype and Country Distribution
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -3114,34 +2980,7 @@ def create_dashboard_layout():
                 ], width=6)
             ], className="mb-4"),
             
-            # ROW 5: Mutation Timeline
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Mutation Timeline", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("Top N Mutations:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="top-mutations-count",
-                                        options=[{"label": str(i), "value": i} for i in [5, 10, 15, 20]],
-                                        value=10,
-                                        clearable=False,
-                                        style={"width": "150px"}
-                                    )
-                                ], width="auto")
-                            ], className="mb-2"),
-                            dcc.Loading(
-                                dcc.Graph(id="mutation-timeline"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=12)
-            ], className="mb-4"),
-            
-            # ROW 6: Epidemiology Summary
+            # ROW 4: Epidemiology Summary
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -3279,7 +3118,7 @@ def create_dashboard_layout():
                 ], width=12)
             ], id="epidemiology-summary-row", className="mb-4"),
             
-            # ROW 7: Mutation Summary
+            # ROW 5: Mutation Summary
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -3291,7 +3130,7 @@ def create_dashboard_layout():
                 ], width=12)
             ], className="mb-4", id="mutation-summary-row"),
             
-            # ROW 8: Quick Actions (New section)
+            # ROW 6: Quick Actions (New section)
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -3328,44 +3167,6 @@ def create_dashboard_layout():
                     ], className="shadow-sm")
                 ], width=12)
             ], className="mb-4"),
-
-            # ROW 9: Recombination Analysis
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("🧬 Recombination Event Analysis", className="card-title fw-bold text-primary mb-3"),
-                            dbc.Row([
-                                # Col 1: Breakpoint Density Plot
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H6("Breakpoint Frequency Density Across Genome", className="card-subtitle mb-2 text-muted"),
-                                            dcc.Loading(
-                                                dcc.Graph(id="recomb-breakpoint-density"),
-                                                type="circle"
-                                            )
-                                        ])
-                                    ], className="h-100 shadow-sm border-light")
-                                ], width=6),
-                                
-                                # Col 2: Recombination Details Table
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H6("Validated Recombination Details Table", className="card-subtitle mb-2 text-muted"),
-                                            dcc.Loading(
-                                                html.Div(id="recomb-details-table-container"),
-                                                type="circle"
-                                            )
-                                        ])
-                                    ], className="h-100 shadow-sm border-light")
-                                ], width=6),
-                            ], className="g-3")
-                        ])
-                    ], className="shadow-sm border-0 mb-4")
-                ], width=12)
-            ], id="recomb-section-row", className="mb-4", style={"display": "none"}),
         ]),
 
         # === TAB 2: MUTATIONS CONTENT (HIDDEN BY DEFAULT) ===
@@ -3462,7 +3263,31 @@ def create_dashboard_layout():
                 ], width=4),
             ], className="mb-4"),
             
-
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5("Mutation Timeline", className="mb-3"),
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Label("Top N Mutations:", className="fw-bold me-2"),
+                                    dcc.Dropdown(
+                                        id="top-mutations-count",
+                                        options=[{"label": str(i), "value": i} for i in [5, 10, 15, 20]],
+                                        value=10,
+                                        clearable=False,
+                                        style={"width": "150px"}
+                                    )
+                                ], width="auto")
+                            ], className="mb-2"),
+                            dcc.Loading(
+                                dcc.Graph(id="mutation-timeline"),
+                                type="circle"
+                            )
+                        ])
+                    ], className="h-100 shadow-sm")
+                ], width=12)
+            ], className="mb-4"),
             
             # Mutation Details Table
             dbc.Row([
@@ -3564,8 +3389,20 @@ def create_dashboard_layout():
                 ], width=12)
             ], className="mb-4"),
             
-            # ROW 1: Top Countries by Burden
+            # ROW 1: Global Burden Forecast and Top Countries
             dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5("Burden Forecast with Projections", className="mb-3"),
+                            dcc.Loading(
+                                dcc.Graph(id="forecast-chart"),
+                                type="circle"
+                            )
+                        ])
+                    ], className="h-100 shadow-sm")
+                ], width=8),
+                
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
@@ -3588,7 +3425,7 @@ def create_dashboard_layout():
                             )
                         ])
                     ], className="h-100 shadow-sm")
-                ], width=12),
+                ], width=4),
             ], className="mb-4"),
             
             # ROW 2: Age and Sex Analysis
@@ -3707,8 +3544,31 @@ def create_dashboard_layout():
                 ], width=6),
             ], className="mb-4"),
             
-            # ROW 4: Burden vs. Sequencing Correlation
+            # ROW 4: Sequencing Priority and Correlation
             dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5("Sequencing Priority Ranking", className="mb-3"),
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Button(
+                                        "Download Priority Table (CSV)",
+                                        id="priority-download-btn",
+                                        color="secondary",
+                                        className="ms-2"
+                                    ),
+                                    dcc.Download(id="priority-download")
+                                ], width="auto"),
+                            ], className="g-3 mb-2"),
+                            dcc.Loading(
+                                dcc.Graph(id="priority-ranking"),
+                                type="circle"
+                            )
+                        ])
+                    ], className="h-100 shadow-sm")
+                ], width=6),
+                
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
@@ -3758,7 +3618,7 @@ def create_dashboard_layout():
                             )
                         ])
                     ], className="h-100 shadow-sm")
-                ], width=12),
+                ], width=6),
             ], className="mb-4"),
             
             # Data Table
@@ -3894,20 +3754,7 @@ def compute_filtered_store(virus, years, regions, countries, genotypes):
     if genotypes:
         df = df[df["genotype"].isin(genotypes)]
 
-    # Ensure all required columns exist, even if missing from cache (e.g. older files)
-    cols = ["ID", "Country_standard", "WHO_Regions", "Year", "genotype", "is_recombinant", "recombination_class"]
-    for col in cols:
-        if col not in df.columns:
-            if col == "is_recombinant":
-                df[col] = "false"
-            elif col == "recombination_class":
-                df[col] = "none"
-            elif col == "ID":
-                df[col] = ""
-            else:
-                df[col] = None
-
-    light = df[cols].copy()
+    light = df[["Country_standard", "WHO_Regions", "Year", "genotype"]].copy()
     return _df_to_json(light)
 
 
@@ -3988,7 +3835,6 @@ def compute_ihme_latest_store(virus, metric, years, regions, countries, sex):
     Output("indicator-total", "children"),
     Output("indicator-countries", "children"),
     Output("indicator-genotypes", "children"),
-    Output("indicator-recombinants", "children"),
     Output("indicator-years", "children"),
     Input("filtered-store", "data"),
     Input("year-slider", "value"),
@@ -3996,54 +3842,28 @@ def compute_ihme_latest_store(virus, metric, years, regions, countries, sex):
 def update_indicators(filtered_json, selected_years):
     df = _df_from_json(filtered_json)
     if df is None or df.empty:
-        return "0", "0", "0", "0", "N/A"
+        return "0", "0", "0", "N/A"
 
     # Totals
     total_genomes = len(df)
     unique_countries = df.get("Country_standard", pd.Series(dtype="object")).nunique()
 
-    # Genotypes: exclude recombinants from count
+    # Genotypes: exclude recombinants from the count, but flag presence
     g = df.get("genotype", pd.Series(dtype="object")).astype("string").str.strip()
-    base_genotypes = g[g != "Recombinant"].dropna()
-    base_genotype_count = base_genotypes.nunique()
+    recomb_mask = g.str.contains(r"recomb", case=False, na=False)  # catches 'Recombinant', 'Recombinants', etc.
+    base_genotype_count = g[~recomb_mask].dropna().nunique()
+    has_recomb = bool(recomb_mask.any())
 
-    # Recombinants count and breakdown
-    recomb_count = (g == "Recombinant").sum()
-    
-    inter_count = 0
-    intra_geno_count = 0
-    intra_sub_count = 0
-    
-    if "recombination_class" in df.columns:
-        recomb_df = df[df["genotype"] == "Recombinant"]
-        classes = recomb_df["recombination_class"].value_counts().to_dict()
-        inter_count = classes.get("inter_genotypic", 0)
-        intra_geno_count = classes.get("intra_genotypic", 0)
-        intra_sub_count = classes.get("intra_subtype", 0)
-        
-    recomb_display = html.Div([
-        html.H4(f"{recomb_count:,}", className="mb-1", style={"fontWeight": "bold"}),
-        html.Div([
-            html.Div([
-                html.Span("Inter-Genotypic: ", style={"color": "#e00603", "fontWeight": "bold"}),
-                f"{inter_count:,}"
-            ], style={"fontSize": "0.75rem", "margin": "0"}),
-            html.Div([
-                html.Span("Intra-Genotypic: ", style={"color": "#f0ad4e", "fontWeight": "bold"}),
-                f"{intra_geno_count:,}"
-            ], style={"fontSize": "0.75rem", "margin": "0"}),
-            html.Div([
-                html.Span("Intra-Subtype: ", style={"color": "#5bc0de", "fontWeight": "bold"}),
-                f"{intra_sub_count:,}"
-            ], style={"fontSize": "0.75rem", "margin": "0"})
-        ])
-    ])
+    if has_recomb:
+        genotypes_text = f"{base_genotype_count} + Recombinants"
+    else:
+        genotypes_text = f"{base_genotype_count}"
 
     # Years label
     years_text = f"{selected_years[0]} - {selected_years[1]}" \
         if selected_years and len(selected_years) == 2 else "All years"
 
-    return f"{total_genomes:,}", str(unique_countries), f"{base_genotype_count}", recomb_display, years_text
+    return f"{total_genomes:,}", str(unique_countries), genotypes_text, years_text
 
 
 @callback(
@@ -4631,7 +4451,6 @@ def get_hev_no_mutation_content():
     Input("filtered-store", "data"),
     Input("selected-virus", "data"),
 )
-@cache.memoize(timeout=86400)
 def render_line(filtered_json, virus):
     df = _df_from_json(filtered_json)
     if df.empty:
@@ -4650,7 +4469,6 @@ def render_line(filtered_json, virus):
     Input("selected-virus", "data"),
     Input("display-mode", "value"),
 )
-@cache.memoize(timeout=86400)
 def render_genotype_bar(filtered_json, virus, display_mode):
     store = get_data_store()
     
@@ -4689,7 +4507,6 @@ def render_genotype_bar(filtered_json, virus, display_mode):
     State("continent-dropdown", "value"),
     State("country-dropdown", "value"),
 )
-@cache.memoize(timeout=86400)
 def render_map(filtered_json, gap_json, ihme_json, virus, display_mode, map_mode, 
                ihme_metric, regions, countries):
     selected_virus = (virus or "HBV")
@@ -4700,13 +4517,6 @@ def render_map(filtered_json, gap_json, ihme_json, virus, display_mode, map_mode
     
     # Show/hide epidemiology controls based on map mode - DEFINE THIS AT THE START
     epi_controls_style = {"display": "block"} if map_mode == "epidemiology" else {"display": "none"}
-
-    # Handle empty/missing filtered data gracefully
-    if (map_mode == "sequences" or map_mode == "recombinants" or not map_mode) and filtered.empty:
-        fig = _empty_world("No sequence data available for current filters")
-        title = f"{selected_virus} Sequence Map"
-        subtitle = "No sequences found"
-        return fig, title, subtitle, epi_controls_style
 
     # MODE 1: Coverage map
     if map_mode == "coverage":
@@ -4742,52 +4552,6 @@ def render_map(filtered_json, gap_json, ihme_json, virus, display_mode, map_mode
         title = f"{selected_virus} Burden-adjusted Sequencing Coverage"
         subtitle = "Coverage = sequences / estimated infections"
     
-        return fig, title, subtitle, epi_controls_style
-
-    # MODE 1.5: Recombinants map
-    elif map_mode == "recombinants":
-        recomb_only = filtered[filtered["is_recombinant"].astype(str).str.lower() == "true"]
-        
-        if display_mode == "PerMillion":
-            if not recomb_only.empty and "Population" in data and not data["population_df"].empty:
-                pop_data = data["population_df"]
-                country_data = recomb_only.groupby("Country_standard").size().reset_index(name="count")
-                country_data = country_data.merge(
-                    pop_data[["Country_standard", "Population"]].drop_duplicates(),
-                    on="Country_standard",
-                    how="left"
-                )
-                country_data["Metric_raw"] = (country_data["count"] / country_data["Population"]) * 1_000_000
-            else:
-                country_data = recomb_only.groupby("Country_standard").size().reset_index(name="Metric_raw")
-        else:
-            country_data = recomb_only.groupby("Country_standard").size().reset_index(name="Metric_raw")
-            
-        # Group counts of recombination classes per country for bubble charts
-        country_genotype_counts = recomb_only.groupby(["Country_standard", "recombination_class"]).size().reset_index(name="Count")
-        country_genotype_counts = country_genotype_counts.rename(columns={"recombination_class": "genotype"})
-        country_genotype_counts["genotype"] = country_genotype_counts["genotype"].replace({
-            "inter_genotypic": "Inter-genotypic",
-            "intra_genotypic": "Intra-genotypic",
-            "intra_subtype": "Intra-subtype",
-            "unknown": "Unknown Class"
-        })
-        
-        fig = create_world_map(
-            country_data,
-            country_genotype_counts,
-            data["coord_lookup"],
-            virus_type=selected_virus,
-            display_mode="recombinants"
-        )
-        
-        if display_mode == "PerMillion":
-            title = f"{selected_virus} Validated Recombinants Map"
-            subtitle = "Recombinants per million population"
-        else:
-            title = f"{selected_virus} Validated Recombinants Map"
-            subtitle = "Recombinants (count)"
-            
         return fig, title, subtitle, epi_controls_style
 
     # MODE 2: Epidemiology map (IHME data)
@@ -5256,7 +5020,6 @@ def update_mutation_category_options(virus, mutation_type):
     Input("mutation-category-filter", "value"),
     Input("mutation-top-n", "value"),
 )
-@cache.memoize(timeout=86400)
 def update_mutation_frequency_chart(filtered_json, virus, mutation_type, category, top_n):
     data = get_data_store()
     selected_virus = virus or "HBV"
@@ -5638,7 +5401,6 @@ def download_mutation_data(n_clicks, filtered_json, virus, mutation_type, catego
     Input("country-dropdown", "value"),
     Input("correlation-sex", "value"),
 )
-@cache.memoize(timeout=86400)
 def update_forecast_chart(virus, regions, countries, sex):
     data = get_data_store()
     return create_forecast_chart(
@@ -5683,7 +5445,6 @@ def update_mutation_timeline(virus, filtered_json, top_n):
     Input("country-dropdown", "value"),
     Input("top-countries-count", "value"),  # ADD THIS
 )
-@cache.memoize(timeout=86400)
 def update_country_stacked_bar_callback(filtered_json, virus, regions, countries, top_n):
     df = _df_from_json(filtered_json)
     return create_country_stacked_bar(df, virus or "HBV", regions, countries, top_n=top_n or 15)
@@ -5695,7 +5456,6 @@ def update_country_stacked_bar_callback(filtered_json, virus, regions, countries
     Input("gap-store", "data"),
     Input("selected-virus", "data"),
 )
-@cache.memoize(timeout=86400)
 def update_priority_ranking_responsive(gap_json, virus):
     gap_df = _df_from_json(gap_json)
     data = get_data_store()
@@ -5810,7 +5570,6 @@ def update_correlation_age_options(virus, metric):
     Input("country-dropdown", "value"),
     Input("epi-display-mode", "value"),
 )
-@cache.memoize(timeout=86400)
 def update_global_burden_timeline(virus, metric, age_group, sex, regions, countries, display_mode):
     data = get_data_store()
     ihme_df = data["ihme_df"]
@@ -5932,7 +5691,6 @@ def update_global_burden_timeline(virus, metric, age_group, sex, regions, countr
     Input("continent-dropdown", "value"),
     Input("top-countries-n", "value"),
 )
-@cache.memoize(timeout=86400)
 def update_top_countries_burden(virus, metric, age_group, sex, regions, top_n):
     data = get_data_store()
     ihme_df = data["ihme_df"]
@@ -7533,161 +7291,3 @@ def reset_time_range(n_clicks, selected_virus):
     max_year = int(df["Year"].max())
     
     return [min_year, max_year]
-
-
-# Callback to update the lower Recombination section
-@callback(
-    Output("recomb-breakpoint-density", "figure"),
-    Output("recomb-details-table-container", "children"),
-    Output("recomb-section-row", "style"),
-    Input("filtered-store", "data"),
-    Input("selected-virus", "data"),
-)
-@cache.memoize(timeout=86400)
-def update_recomb_section(filtered_json, virus):
-    df = _df_from_json(filtered_json)
-    selected_virus = (virus or "HBV").upper()
-    data = get_data_store()
-    
-    # Filter for validated recombinants of the currently filtered dataset
-    if df.empty or "is_recombinant" not in df.columns:
-        return go.Figure(), html.Div("No data available"), {"display": "none"}
-        
-    recomb_seqs = df[df["is_recombinant"].astype(str).str.lower() == "true"]
-    if recomb_seqs.empty:
-        return go.Figure(), html.Div("No recombination events found for current selection"), {"display": "none"}
-        
-    # Get the raw recombinants table from store to query breakpoints
-    recomb_df = data.get(f"{selected_virus.lower()}_recombs", pd.DataFrame())
-    if recomb_df.empty:
-        return go.Figure(), html.Div("No recombination event coordinates found"), {"display": "none"}
-        
-    # Merge coordinates with the filtered sequence set
-    from data_loader import normalize_accession_id
-    recomb_df["ID_norm"] = recomb_df["ID"].apply(normalize_accession_id)
-    recomb_seqs["ID_norm"] = recomb_seqs["ID"].apply(normalize_accession_id)
-    
-    merged_recombs = recomb_df.merge(recomb_seqs[["ID_norm"]], on="ID_norm", how="inner")
-    if merged_recombs.empty:
-        return go.Figure(), html.Div("No recombination details match filters"), {"display": "none"}
-        
-    # 1. CREATE BREAKPOINT DENSITY PLOT
-    fig = go.Figure()
-    
-    merged_recombs["breakpoint_start"] = pd.to_numeric(merged_recombs["breakpoint_start"], errors="coerce")
-    merged_recombs["breakpoint_end"] = pd.to_numeric(merged_recombs["breakpoint_end"], errors="coerce")
-    
-    valid_coords = merged_recombs.dropna(subset=["breakpoint_start", "breakpoint_end"])
-    
-    if selected_virus == "HBV":
-        genome_length = 3200
-        nbins = 32
-    elif selected_virus == "HCV":
-        genome_length = 9600
-        nbins = 96
-    else:
-        genome_length = 7200
-        nbins = 72
-        
-    if not valid_coords.empty:
-        fig.add_trace(go.Histogram(
-            x=valid_coords["breakpoint_start"],
-            name="Breakpoint Start",
-            xbins=dict(start=0, end=genome_length, size=genome_length/nbins),
-            marker_color="#d62728",
-            opacity=0.6,
-            hovertemplate="Position: %{x} bp<br>Count: %{y}<extra></extra>"
-        ))
-        fig.add_trace(go.Histogram(
-            x=valid_coords["breakpoint_end"],
-            name="Breakpoint End",
-            xbins=dict(start=0, end=genome_length, size=genome_length/nbins),
-            marker_color="#1f77b4",
-            opacity=0.6,
-            hovertemplate="Position: %{x} bp<br>Count: %{y}<extra></extra>"
-        ))
-        
-    fig.update_layout(
-        barmode="overlay",
-        xaxis=dict(title="Genome Position (bp)", range=[0, genome_length]),
-        yaxis=dict(title="Frequency"),
-        margin=dict(l=40, r=20, t=20, b=40),
-        legend=dict(x=0.8, y=0.95, bgcolor="rgba(255,255,255,0.5)"),
-        height=350,
-        hovermode="closest"
-    )
-    
-    # 2. CREATE DETAILS TABLE
-    display_df = merged_recombs[[
-        "ID", "genotype", "recombination_class", 
-        "parent_1", "parent_2", 
-        "breakpoint_start", "breakpoint_end", "p_value"
-    ]].copy()
-    
-    display_df["recombination_class"] = display_df["recombination_class"].replace({
-        "inter_genotypic": "Inter-genotypic",
-        "intra_genotypic": "Intra-genotypic",
-        "intra_subtype": "Intra-subtype",
-        "unknown": "Unknown"
-    })
-    
-    display_df["parent_1"] = display_df["parent_1"].apply(lambda p: str(p).replace("ref_", ""))
-    display_df["parent_2"] = display_df["parent_2"].apply(lambda p: str(p).replace("ref_", ""))
-    
-    def format_pval(p):
-        try:
-            val = float(p)
-            return f"{val:.3e}"
-        except:
-            return str(p)
-    display_df["p_value"] = display_df["p_value"].apply(format_pval)
-    
-    display_df.columns = [
-        "Accession ID", "Genotype", "Class", 
-        "Parent 1 Ref", "Parent 2 Ref", 
-        "BP Start", "BP End", "p-value"
-    ]
-    
-    from dash import dash_table
-    table = dash_table.DataTable(
-        data=display_df.to_dict("records"),
-        columns=[{"name": i, "id": i} for i in display_df.columns],
-        page_size=8,
-        sort_action="native",
-        filter_action="native",
-        style_table={'overflowX': 'auto', 'minWidth': '100%'},
-        style_cell={
-            'textAlign': 'left',
-            'padding': '10px',
-            'fontFamily': 'Inter, sans-serif',
-            'fontSize': '13px'
-        },
-        style_header={
-            'backgroundColor': '#212529',
-            'color': 'white',
-            'fontWeight': 'bold',
-            'fontSize': '14px',
-            'border': '1px solid #373b3e'
-        },
-        style_data_conditional=[
-            {
-                'if': {'row_index': 'odd'},
-                'backgroundColor': '#f8f9fa'
-            },
-            {
-                'if': {'column_id': 'Class', 'filter_query': '{Class} eq "Inter-genotypic"'},
-                'color': '#856404',
-                'backgroundColor': '#fff3cd',
-                'fontWeight': 'bold'
-            },
-            {
-                'if': {'column_id': 'Class', 'filter_query': '{Class} eq "Intra-subtype"'},
-                'color': '#155724',
-                'backgroundColor': '#d4edda',
-                'fontWeight': 'bold'
-            }
-        ],
-        className="table table-hover table-striped border rounded"
-    )
-    
-    return fig, table, {"display": "block"}
