@@ -842,11 +842,11 @@ def create_world_map(
         HEV_COLOR_SCALE = [[0.0, "#F7FCF0"], [0.25, "#A8DDB5"], [0.5, "#2B8CBE"], [0.75, "#084081"], [1.0, "#06214D"]]
         
         if virus_type == "HBV":
-           colorscale = HBV_COLOR_SCALE
+            colorscale = HBV_COLOR_SCALE
         elif virus_type == "HCV":
             colorscale = HCV_COLOR_SCALE
         else:
-            HEV_COLOR_SCALE
+            colorscale = HEV_COLOR_SCALE
         
         # Determine colorbar title from map_title
         if "Prevalence" in map_title:
@@ -966,7 +966,7 @@ def create_world_map(
         elif virus_type == "HCV":
             colorscale = HCV_COLOR_SCALE
         else:
-            HEV_COLOR_SCALE
+            colorscale = HEV_COLOR_SCALE
 
         fig.add_trace(
             go.Choropleth(
