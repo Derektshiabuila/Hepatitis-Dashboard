@@ -181,7 +181,7 @@ layout = dbc.Container([
                 ], md=3, className="mb-2")
             ], className="g-2 align-items-end"),
         ])
-    ], className="shadow-sm mb-4 border-0", style={"borderRadius": "12px"}),
+    ], className="shadow-sm mb-4 border-0", style={"borderRadius": "12px", "position": "relative", "zIndex": 10}),
     
     # Results counter
     html.Div(id="res-count", className="text-muted mb-3 fw-medium"),

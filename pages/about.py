@@ -34,7 +34,7 @@ def _fact_card(value: str, caption: str, icon: str = None) -> dbc.Card:
                 ),
             ]
         ),
-        className="border-0 shadow-sm mb-3 bg-white",
+        className="border-0 shadow-sm mb-3",
         style={"transition": "transform 0.2s", "borderRadius": "12px"}
     )
 
@@ -44,21 +44,21 @@ def key_facts_card():
         [
             html.H4("📊 Key Facts at a Glance", 
                    className="text-center mb-4", 
-                   style={"color": "#2c3e50", "fontWeight": 600, "paddingBottom": "10px", "borderBottom": "2px solid #4ca1af"}),
+                   style={"color": "var(--text)", "fontWeight": 600, "paddingBottom": "10px", "borderBottom": "2px solid #4ca1af"}),
             _fact_card("14,529", "Whole genomes analyzed", "bi bi-dna"),
             _fact_card("141", "Countries covered", "bi bi-globe"),
             _fact_card("18+", "Genotypes tracked", "bi bi-diagram-3"),
             _fact_card("Real-time", "Analytics platform", "bi bi-lightning"),
         ],
         className="h-100 p-4",
-        style={"backgroundColor": "#f8fafc", "borderRadius": "15px", "border": "1px solid #e9ecef"}
+        style={"backgroundColor": "var(--panel-2)", "borderRadius": "15px", "border": "1px solid #e9ecef"}
     )
 
 def _section_header(title: str, emoji: str) -> html.H2:
     return html.H2(
         f"{emoji} {title}",
         style={
-            "color": "#2c3e50",
+            "color": "var(--text)",
             "textAlign": "center",
             "marginBottom": "40px",
             "fontWeight": 700,
@@ -75,7 +75,7 @@ def _feature_card(title: str, items: list, icon: str, color: str) -> dbc.Card:
                 html.I(className=icon, style={"fontSize": "2.5rem", "color": color}),
                 className="text-center mb-3"
             ),
-            html.H4(title, className="text-center mb-3", style={"color": "#2c3e50", "fontWeight": 600}),
+            html.H4(title, className="text-center mb-3", style={"color": "var(--text)", "fontWeight": 600}),
             html.Ul([html.Li(item, style={"marginBottom": "8px"}) for item in items], className="ps-3")
         ]),
         className="h-100 shadow-sm border-0",
@@ -89,11 +89,11 @@ def _feature_card(title: str, items: list, icon: str, color: str) -> dbc.Card:
 def dashboard_mission_section():
     return dbc.Container(
         [
-            html.H1("About This Dashboard", style={"color": "#2c3e50", "marginBottom": "30px"}),
+            html.H1("About This Dashboard", style={"color": "var(--text)", "marginBottom": "30px"}),
             
             dbc.Row([
                 dbc.Col([
-                    html.H2("🎯 Our Mission", style={"color": "#2c3e50", "marginBottom": "20px"}),
+                    html.H2("🎯 Our Mission", style={"color": "var(--text)", "marginBottom": "20px"}),
                     html.P(
                         "This platform transforms global hepatitis surveillance by integrating genomic sequencing data "
                         "with epidemiological insights to identify critical gaps and guide public health interventions.",
@@ -105,7 +105,7 @@ def dashboard_mission_section():
                         "WHO elimination goals."
                     ),
                     html.Div([
-                        html.H5("Core Objectives", style={"color": "#2c3e50", "marginTop": "25px", "marginBottom": "15px"}),
+                        html.H5("Core Objectives", style={"color": "var(--text)", "marginTop": "25px", "marginBottom": "15px"}),
                         html.Ul([
                             html.Li("Identify geographic and genotypic surveillance gaps"),
                             html.Li("Monitor emerging drug resistance patterns"),
@@ -163,7 +163,7 @@ def user_types_section():
                             "Inform policy and funding decisions"
                         ],
                         "bi bi-globe",
-                        "#2c3e50"
+                        "var(--text)"
                     )
                 ], md=4, className="mb-3"),
             ])
@@ -289,42 +289,42 @@ def surveillance_gaps_section():
             dbc.Row([
                 dbc.Col(
                     dbc.Card([
-                        dbc.CardHeader(html.H5("🌍 Geographic Disparities", className="mb-0", style={"color": "#2c3e50"})),
+                        dbc.CardHeader(html.H5("🌍 Geographic Disparities", className="mb-0", style={"color": "var(--text)"})),
                         dbc.CardBody([
                             html.P("Sequencing concentrated in China/US while high-endemicity regions like Africa are severely underrepresented.",
                                   className="text-muted mb-2"),
                             html.Div([
                                 html.Strong("Key finding: ", style={"color": "#dc3545"}),
                                 "Tens of thousands of additional sequences needed from underrepresented regions"
-                            ], style={"backgroundColor": "#fff3cd", "padding": "10px", "borderRadius": "5px"})
+                            ], style={"backgroundColor": "rgba(245, 166, 35, 0.1)", "border": "1px solid rgba(245, 166, 35, 0.25)", "padding": "10px", "borderRadius": "5px"})
                         ])
                     ], className="h-100 shadow-sm border-0"),
                     width=4, className="mb-3"
                 ),
                 dbc.Col(
                     dbc.Card([
-                        dbc.CardHeader(html.H5("🧬 Genotypic Gaps", className="mb-0", style={"color": "#2c3e50"})),
+                        dbc.CardHeader(html.H5("🧬 Genotypic Gaps", className="mb-0", style={"color": "var(--text)"})),
                         dbc.CardBody([
                             html.P("Critical genotypes (HBV-E, HCV-5/8) are significantly under-sampled, limiting understanding of viral diversity.",
                                   className="text-muted mb-2"),
                             html.Div([
                                 html.Strong("Impact: ", style={"color": "#fd7e14"}),
                                 "Hinders personalized treatment approaches and vaccine development"
-                            ], style={"backgroundColor": "#e7f4e4", "padding": "10px", "borderRadius": "5px"})
+                            ], style={"backgroundColor": "rgba(139, 195, 74, 0.1)", "border": "1px solid rgba(139, 195, 74, 0.25)", "padding": "10px", "borderRadius": "5px"})
                         ])
                     ], className="h-100 shadow-sm border-0"),
                     width=4, className="mb-3"
                 ),
                 dbc.Col(
                     dbc.Card([
-                        dbc.CardHeader(html.H5("⚖️ Burden Mismatch", className="mb-0", style={"color": "#2c3e50"})),
+                        dbc.CardHeader(html.H5("⚖️ Burden Mismatch", className="mb-0", style={"color": "var(--text)"})),
                         dbc.CardBody([
                             html.P("Critical misalignment between disease burden and sequencing efforts across regions.",
                                   className="text-muted mb-2"),
                             html.Div([
                                 html.Strong("Recommendation: ", style={"color": "#0d6efd"}),
                                 "Targeted sequencing in high-burden, low-sequence regions"
-                            ], style={"backgroundColor": "#cce7ff", "padding": "10px", "borderRadius": "5px"})
+                            ], style={"backgroundColor": "rgba(79, 174, 255, 0.1)", "border": "1px solid rgba(79, 174, 255, 0.25)", "padding": "10px", "borderRadius": "5px"})
                         ])
                     ], className="h-100 shadow-sm border-0"),
                     width=4, className="mb-3"
@@ -339,7 +339,7 @@ def interactive_dashboard_section():
     return dbc.Container(
         [
             html.H3("📈 Interactive Dashboard Preview", 
-                   style={"textAlign": "center", "color": "#2c3e50", "marginBottom": "30px", "fontWeight": 700}),
+                   style={"textAlign": "center", "color": "var(--text)", "marginBottom": "30px", "fontWeight": 700}),
             
             # Key statistics
             dbc.Row([
@@ -352,7 +352,7 @@ def interactive_dashboard_section():
             # Dual maps
             html.Div([
                 html.H4("Global Sequence Distribution", 
-                       style={"textAlign": "center", "color": "#2c3e50", "marginBottom": "25px", "fontWeight": 600}),
+                       style={"textAlign": "center", "color": "var(--text)", "marginBottom": "25px", "fontWeight": 600}),
                 
                 dbc.Row([
                     dbc.Col(
@@ -407,7 +407,7 @@ def interactive_dashboard_section():
                         "Interactive Visualizations",
                         ["Real-time surveillance maps", "Genotype distribution", "Temporal trends", "Coverage metrics"],
                         "bi bi-bar-chart",
-                        "#4ca1af"
+                        "var(--hcv)"
                     ),
                     width=6, className="mb-4"
                 ),
@@ -416,7 +416,7 @@ def interactive_dashboard_section():
                         "Advanced Analytics",
                         ["Drug resistance tracking", "Geographic analysis", "Regional comparisons", "Custom filtering"],
                         "bi bi-graph-up",
-                        "#2c3e50"
+                        "var(--text)"
                     ),
                     width=6, className="mb-4"
                 ),
@@ -428,14 +428,14 @@ def interactive_dashboard_section():
                 children=[
                     html.H4("Download Genomic Surveillance Report", style={
                         "textAlign": "center",
-                        "color": "#2c3e50",
+                        "color": "var(--text)",
                         "marginBottom": "20px",
                         "fontWeight": 700
                     }),
                 
                     html.Div([
                         dbc.Label("Select Report Type:", html_for="report-type-dropdown",
-                                  style={"fontWeight": "bold", "color": "#2c3e50", "marginBottom": "10px"}),
+                                  style={"fontWeight": "bold", "color": "var(--text)", "marginBottom": "10px"}),
                 
                         dcc.Dropdown(
                             id="report-type-dropdown",
@@ -457,7 +457,7 @@ def interactive_dashboard_section():
                             size="lg",
                             className="mt-3",
                             style={
-                                "backgroundColor": "#2c3e50",
+                                "backgroundColor": "var(--text)",
                                 "border": "none",
                                 "borderRadius": "8px",
                                 "fontWeight": 600,
@@ -474,7 +474,7 @@ def interactive_dashboard_section():
                             size="lg",
                             className="mt-3 mx-2 px-4",
                             style={
-                                "backgroundColor": "#4ca1af",
+                                "backgroundColor": "var(--hcv)",
                                 "border": "none",
                                 "borderRadius": "8px",
                                 "fontWeight": 600,
@@ -486,7 +486,7 @@ def interactive_dashboard_section():
                 ],
                 className="text-center mt-5 py-4",
                 style={
-                    "backgroundColor": "#f8fafc",
+                    "backgroundColor": "var(--panel-2)",
                     "borderRadius": "15px",
                     "padding": "30px",
                     "maxWidth": "600px",
@@ -496,7 +496,7 @@ def interactive_dashboard_section():
         ],
         fluid=True,
         className="my-5 py-4",
-        style={"backgroundColor": "#f8fafc", "borderRadius": "15px"}
+        style={"backgroundColor": "var(--panel-2)", "borderRadius": "15px"}
     )
 
 def acknowledgments_section():
@@ -505,7 +505,7 @@ def acknowledgments_section():
             dbc.Card(
                 dbc.CardBody(
                     [
-                        html.H2("Acknowledgments & Resources", style={"color": "#2c3e50", "marginBottom": "16px"}),
+                        html.H2("Acknowledgments & Resources", style={"color": "var(--text)", "marginBottom": "16px"}),
                         html.P(
                             "Developed by [Your Lab / Institution] in collaboration with [Collaborators].",
                             style={"marginBottom": "6px"},
@@ -550,18 +550,18 @@ def acknowledgments_section():
                             href="/dashboard",
                             color="primary",
                             className="me-2",
-                            style={"backgroundColor": "#4ca1af", "border": "none"},
+                            style={"backgroundColor": "var(--hcv)", "border": "none"},
                         ),
                         dbc.Button(
                             "Access Research Library", 
                             href="/resources",
                             color="secondary",
-                            style={"backgroundColor": "#2c3e50", "border": "none"},
+                            style={"backgroundColor": "var(--text)", "border": "none"},
                         ),
                     ]
                 ),
                 className="shadow-sm border-0",
-                style={"borderRadius": "12px", "backgroundColor": "#f8f9fa"},
+                style={"borderRadius": "12px", "backgroundColor": "var(--panel-2)"},
             )
         ],
         fluid=True,
@@ -613,7 +613,7 @@ layout = html.Div(
                             "marginBottom": "1rem"
                         }),
                         html.Hr(style={
-                            "width": "120px", "height": "4px", "backgroundColor": "#4ca1af",
+                            "width": "120px", "height": "4px", "backgroundColor": "var(--hcv)",
                             "margin": "0 auto", "border": "none", "marginBottom": "1.5rem"
                         }),
                         html.P("Open-access analytics integrating global HBV/HCV genomic and epidemiological data to inform elimination strategies.",
@@ -641,5 +641,5 @@ layout = html.Div(
             style={'maxWidth': '1440px'}
         ),
     ],
-    style={"backgroundColor": "#ffffff", "minHeight": "100vh"}
+    style={"backgroundColor": "transparent", "minHeight": "100vh"}
 )

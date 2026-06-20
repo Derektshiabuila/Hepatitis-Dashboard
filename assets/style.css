@@ -40,8 +40,8 @@
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   overflow: hidden;       /* clips the image to a circle */
-  /* two rings: inner white, outer blue */
-  box-shadow: 0 0 0 6px #ffffff, 0 0 0 10px #1d4ed8;
+  /* two rings: inner dark panel, outer current virus accent */
+  box-shadow: 0 0 0 6px var(--panel), 0 0 0 10px var(--current-accent);
 }
 
 .avatar-ring img {

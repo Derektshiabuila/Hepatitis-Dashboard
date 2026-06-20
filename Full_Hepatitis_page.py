@@ -33,47 +33,196 @@ app = dash.Dash(
     suppress_callback_exceptions=True,
 )
 
-def navbar():
+def global_sidebar():
     reg = {p["name"]: p["path"] for p in dash.page_registry.values()}
-    order = ["Dashboard", "About", "Resources", "Contact"]
-    items = [dbc.NavItem(dbc.NavLink(name, href=reg[name], active="exact"))
-             for name in order if name in reg]
-    return dbc.Navbar(
-        dbc.Container([
-            dbc.NavbarBrand("Hepatitis", className="fw-bold"),
-            dbc.Nav(items, pills=True, navbar=True, className="me-auto"),
+    
+    # Brand Header
+    brand = html.Div(
+        className="hep-sidebar-brand",
+        children=[
+            html.Div(html.I(className="fa-solid fa-dna"), className="hep-brand-icon"),
             html.Div([
-                dcc.Input(
-                    id="global-search-input", 
-                    placeholder="Search Accession (e.g. KF779250.1)...", 
-                    type="text", 
-                    className="form-control me-2", 
-                    style={"width": "260px", "borderRadius": "20px"}
-                ),
-                dbc.Button(
-                    [html.I(className="fa fa-search me-1"), "Search"], 
-                    id="global-search-btn", 
-                    color="light", 
-                    outline=True, 
-                    className="my-2 my-sm-0 fw-semibold", 
-                    style={"borderRadius": "20px"}
-                ),
-            ], className="d-flex align-items-center")
-        ]),
-        color="primary", dark=True, sticky="top", className="mb-4",
+                html.Div("HepTracker", className="hep-brand-title"),
+                html.Div("GENOMICS DASHBOARD", className="hep-brand-subtitle"),
+            ]),
+        ],
+    )
+    
+    # Dashboard Tools Section
+    tools_section = html.Div(
+        className="hep-sidebar-section",
+        children=[
+            html.Div("Dashboard tools:", className="hep-sidebar-label"),
+            dbc.Button(
+                [html.I(className="fa-solid fa-table-cells-large hep-nav-icon"), html.Span("Overview")],
+                id="tab-overview",
+                n_clicks=1,
+                color="link",
+                className="hep-nav-item hep-nav-active",
+            ),
+            dbc.Button(
+                [html.I(className="fa-solid fa-dna hep-nav-icon"), html.Span("Mutations")],
+                id="tab-mutations",
+                n_clicks=0,
+                color="link",
+                className="hep-nav-item",
+            ),
+            dbc.Button(
+                [html.I(className="fa-solid fa-wave-square hep-nav-icon"), html.Span("Epidemiology")],
+                id="tab-epidemiology",
+                n_clicks=0,
+                color="link",
+                className="hep-nav-item",
+            ),
+            dbc.Button(
+                [html.I(className="fa-solid fa-flask hep-nav-icon"), html.Span("My Sequences")],
+                id="tab-user-seq",
+                n_clicks=0,
+                color="link",
+                className="hep-nav-item",
+            ),
+        ]
+    )
+    
+    #Virus Selector Section
+    virus_section = html.Div(
+        className="hep-virus-panel",
+        children=[
+            html.Div("Virus selector:", className="hep-sidebar-label"),
+            html.Div(
+                [html.Span(className="hep-dot hep-dot-a"), html.Span("Hepatitis A")],
+                className="hep-virus-item hep-virus-disabled",
+            ),
+            dbc.Button(
+                [html.Span(className="hep-radio-dot"), html.Span("Hepatitis B")],
+                id="btn-hbv",
+                n_clicks=1,
+                color="link",
+                className="hep-virus-item hep-virus-active",
+            ),
+            dbc.Button(
+                [html.Span(className="hep-dot hep-dot-c"), html.Span("Hepatitis C")],
+                id="btn-hcv",
+                n_clicks=0,
+                color="link",
+                className="hep-virus-item",
+            ),
+            html.Div(
+                [html.Span(className="hep-dot hep-dot-d"), html.Span("Hepatitis D")],
+                className="hep-virus-item hep-virus-disabled",
+            ),
+            dbc.Button(
+                [html.Span(className="hep-dot hep-dot-e"), html.Span("Hepatitis E")],
+                id="btn-hev",
+                n_clicks=0,
+                color="link",
+                className="hep-virus-item",
+            ),
+        ]
+    )
+    
+    # Pages Section
+    pages_section = html.Div(
+        className="hep-sidebar-section",
+        style={"borderTop": "1px solid var(--border)", "paddingTop": "15px"},
+        children=[
+            html.Div("Pages:", className="hep-sidebar-label"),
+            dcc.Link(
+                [html.I(className="fa-solid fa-gauge hep-nav-icon"), html.Span("Dashboard")],
+                id="link-dashboard",
+                href=reg.get("Dashboard", "/dashboard"),
+                className="hep-page-link hep-nav-item btn",
+            ),
+            dcc.Link(
+                [html.I(className="fa-solid fa-circle-info hep-nav-icon"), html.Span("About")],
+                id="link-about",
+                href=reg.get("About", "/about"),
+                className="hep-page-link hep-nav-item btn",
+            ),
+            dcc.Link(
+                [html.I(className="fa-solid fa-book-open hep-nav-icon"), html.Span("Resources")],
+                id="link-resources",
+                href=reg.get("Resources", "/resources"),
+                className="hep-page-link hep-nav-item btn",
+            ),
+            dcc.Link(
+                [html.I(className="fa-solid fa-envelope hep-nav-icon"), html.Span("Contact")],
+                id="link-contact",
+                href=reg.get("Contact", "/contact"),
+                className="hep-page-link hep-nav-item btn",
+            ),
+        ]
+    )
+    
+    return html.Aside(
+        id="sidebar-container",
+        className="hep-sidebar",
+        children=[
+            brand,
+            tools_section,
+            virus_section,
+            pages_section
+        ]
     )
 
-app.layout = dbc.Container(
+app.layout = html.Div(
     [
-        navbar(),
-        dash.page_container,
-        # Global Search Modal
+        dcc.Location(id="url", refresh=False),
+        dcc.Store(id="selected-virus", data="HBV"),
+        dcc.Store(id="dashboard-active-page-store", data=True),
+        dcc.Store(id="active-tab-store", data="overview"),
+        
+        # Mobile top header (only visible on mobile/tablet)
+        html.Div(
+            className="mobile-header d-flex d-md-none align-items-center justify-content-between p-3",
+            children=[
+                dbc.Button(
+                    html.I(className="fa-solid fa-bars"),
+                    id="mobile-sidebar-toggle",
+                    color="link",
+                    className="text-white fs-3 p-0",
+                ),
+                html.Div(
+                    "HepTracker",
+                    className="fw-bold fs-4 text-white",
+                    style={"fontFamily": "var(--serif)"}
+                ),
+                html.Div(style={"width": "30px"}), # Spacer to center
+            ]
+        ),
+        
+        # Sidebar Backdrop (for closing sidebar on tap on mobile)
+        html.Div(id="sidebar-backdrop", className="sidebar-backdrop"),
+
+        html.Div(
+            className="app-shell-layout",
+            children=[
+                global_sidebar(),
+                html.Div(
+                    dash.page_container,
+                    id="page-content-wrapper",
+                    className="hep-main-content",
+                ),
+            ]
+        ),
+
         dbc.Modal(
             [
-                dbc.ModalHeader(dbc.ModalTitle("Sequence Details", id="search-modal-title", className="fw-bold")),
+                dbc.ModalHeader(
+                    dbc.ModalTitle(
+                        "Sequence Details",
+                        id="search-modal-title",
+                        className="fw-bold"
+                    )
+                ),
                 dbc.ModalBody(id="search-modal-body"),
                 dbc.ModalFooter(
-                    dbc.Button("Close", id="search-modal-close", className="ms-auto", color="secondary")
+                    dbc.Button(
+                        "Close",
+                        id="search-modal-close",
+                        className="ms-auto",
+                        color="secondary"
+                    )
                 ),
             ],
             id="search-modal",
@@ -81,8 +230,69 @@ app.layout = dbc.Container(
             is_open=False,
         ),
     ],
-    fluid=True,
+    className="app-shell",
 )
+
+#Global Navigation redirects
+@app.callback(
+    Output("url", "pathname"),
+    Input("tab-overview", "n_clicks"),
+    Input("tab-mutations", "n_clicks"),
+    Input("tab-epidemiology", "n_clicks"),
+    Input("tab-user-seq", "n_clicks"),
+    Input("btn-hbv", "n_clicks"),
+    Input("btn-hcv", "n_clicks"),
+    Input("btn-hev", "n_clicks"),
+    State("url", "pathname"),
+    prevent_initial_call=True
+)
+def redirect_to_dashboard(*args):
+    current_path = args[-1]
+    if current_path not in ["/", "/dashboard"]:
+        return "/dashboard"
+    return dash.no_update
+
+# Toggle mobile sidebar class
+@app.callback(
+    Output("sidebar-container", "className"),
+    Input("mobile-sidebar-toggle", "n_clicks"),
+    Input("sidebar-backdrop", "n_clicks"),
+    Input("url", "pathname"),
+    State("sidebar-container", "className"),
+    prevent_initial_call=True
+)
+def toggle_sidebar_class(n_clicks_toggle, n_clicks_backdrop, pathname, current_className):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return "hep-sidebar"
+    
+    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    if trigger_id in ["mobile-sidebar-toggle", "sidebar-backdrop"]:
+        if "mobile-open" in current_className:
+            return "hep-sidebar"
+        else:
+            return "hep-sidebar mobile-open"
+            
+    return "hep-sidebar"
+
+# Highlight active Page links in sidebar
+@app.callback(
+    Output("link-dashboard", "className"),
+    Output("link-about", "className"),
+    Output("link-resources", "className"),
+    Output("link-contact", "className"),
+    Input("url", "pathname")
+)
+def update_sidebar_active_links(pathname):
+    base_class = "hep-page-link hep-nav-item btn"
+    active_class = "hep-page-link hep-nav-item btn hep-page-active"
+    return (
+        active_class if pathname in ["/", "/dashboard"] else base_class,
+        active_class if pathname == "/about" else base_class,
+        active_class if pathname == "/resources" else base_class,
+        active_class if pathname == "/contact" else base_class,
+    )
 
 app.server.config["DATA_STORE"] = load_and_preprocess_data()
 
