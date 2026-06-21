@@ -486,6 +486,18 @@ def normalize_genotype_label(genotype: str, virus: str) -> str:
 
     return g
 
+@lru_cache(maxsize=1000)
+def country_name_from_iso3(iso3):
+    if not isinstance(iso3, str) or not iso3.strip():
+        return None
+    try:
+        country = pycountry.countries.get(alpha_3=iso3.strip().upper())
+        if country:
+            return country.name
+    except Exception:
+        pass
+    return iso3
+
 def load_and_preprocess_data():
     cache_file = get_data_path("results/preprocessed_data_store.pkl")
     
@@ -502,7 +514,8 @@ def load_and_preprocess_data():
         "results/hev/validated_recombinants.tsv",
         "data/population_by_country_year.csv",
         "data/IHME-GBD_2021_DATA-9e7ec2c0-1.csv",
-        "data/WHO_regions_countries_coordinates.txt"
+        "data/WHO_regions_countries_coordinates.txt",
+        "results/who_gho/who_gho_hepatitis_country_profiles.tsv"
     ]
     
     # Check if cache is valid (exists and newer than all existing source files)
@@ -527,8 +540,12 @@ def load_and_preprocess_data():
             import pickle
             with open(cache_file, 'rb') as f:
                 data_store = pickle.load(f)
-                print("✅ Cache loaded successfully.")
-                return data_store
+                if 'who_gho_df' not in data_store:
+                    cache_valid = False
+                    print("🔄 Cache missing 'who_gho_df'. Invalidating cache.")
+                else:
+                    print("✅ Cache loaded successfully.")
+                    return data_store
         except Exception as e:
             print(f"⚠️ Failed to load cache: {e}, falling back to full preprocessing...")
 
@@ -575,6 +592,7 @@ def load_and_preprocess_data():
         # Load additional data with better error handling
         population_df = load_csv_file("data/population_by_country_year.csv")
         ihme_df = load_csv_file("data/IHME-GBD_2021_DATA-9e7ec2c0-1.csv")
+        who_gho_df = load_with_encoding("results/who_gho/who_gho_hepatitis_country_profiles.tsv")
 
         # Load mutation data (handle missing files gracefully)
         hbv_mut = load_with_encoding("results/hbv/final_resistance.tsv")
@@ -774,6 +792,17 @@ def load_and_preprocess_data():
         if not ihme_df.empty:
             ihme_df = standardize_country_column(ihme_df, 'location')
             
+        if not who_gho_df.empty:
+            who_gho_df['Country_name'] = who_gho_df['country'].apply(country_name_from_iso3)
+            who_gho_df = standardize_country_column(who_gho_df, 'Country_name')
+            
+            # Ensure GHO columns are correctly typed
+            if "year" in who_gho_df.columns:
+                who_gho_df["year"] = pd.to_numeric(who_gho_df["year"], errors="coerce")
+            for col in who_gho_df.columns:
+                if col not in ['country', 'Country_name', 'Country_standard', 'WHO_Regions']:
+                    who_gho_df[col] = pd.to_numeric(who_gho_df[col], errors="coerce")
+            
         if not ihme_df.empty and "Country_standard" in ihme_df.columns:
             ihme_df["Country_standard"] = (
                 ihme_df["Country_standard"]
@@ -815,6 +844,9 @@ def load_and_preprocess_data():
 
         if not ihme_df.empty and not coords.empty:
             ihme_df = merge_who_region(ihme_df, coords)
+            
+        if not who_gho_df.empty and not coords.empty:
+            who_gho_df = merge_who_region(who_gho_df, coords)
     
         # Fix population data if available
         if not population_df.empty:
@@ -968,7 +1000,8 @@ def load_and_preprocess_data():
             'hev_summary_raw': hev_data.copy(),
             'hbv_recombs': recombs_dict.get('hbv', pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"])),
             'hcv_recombs': recombs_dict.get('hcv', pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"])),
-            'hev_recombs': recombs_dict.get('hev', pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"]))
+            'hev_recombs': recombs_dict.get('hev', pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"])),
+            'who_gho_df': who_gho_df
         }
         
         # Save to cache
@@ -1012,5 +1045,6 @@ def load_and_preprocess_data():
             'hev_summary_raw': pd.DataFrame(),
             'hbv_recombs': pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"]),
             'hcv_recombs': pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"]),
-            'hev_recombs': pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"])
+            'hev_recombs': pd.DataFrame(columns=["ID", "parent_1", "parent_2", "breakpoint_start", "breakpoint_end", "p_value", "methods", "recombination_class"]),
+            'who_gho_df': pd.DataFrame()
         }

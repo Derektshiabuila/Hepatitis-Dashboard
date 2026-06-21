@@ -19,7 +19,7 @@ import plotly.io as pio
 from hep_theme import (
     VIRUS_COLORS, sequential_scale, genotype_palette,
     TABLE_HEADER_STYLE, TABLE_CELL_STYLE, TABLE_ODD_ROW_STYLE,
-    register_theme,
+    register_theme, shade,
 )
 register_theme()
 
@@ -484,10 +484,12 @@ def ihme_latest_by_country(ihme_df, virus, measure_metric, sex, regions=None, co
     latest_year = int(base["year"].max())
     latest = base[base["year"] == latest_year].copy()
 
-    # Sum across age groups for each country
+    # Sum across age groups for each country (or mean for rates/percents)
     if not latest.empty:
-        # Group by country and sum values
-        latest = latest.groupby(["Country_standard", "year"], as_index=False)["val"].sum()
+        if ihme_metric in ["Percent", "Rate"]:
+            latest = latest.groupby(["Country_standard", "year"], as_index=False)["val"].mean()
+        else:
+            latest = latest.groupby(["Country_standard", "year"], as_index=False)["val"].sum()
     
     latest["Metric_raw"] = pd.to_numeric(latest["val"], errors="coerce")
     latest["Metric"] = latest["Metric_raw"].apply(lambda x: np.log10(x) if (np.isfinite(x) and x > 0) else np.nan)
@@ -1876,57 +1878,6 @@ def _empty_world(message: str) -> go.Figure:
     )
     return fig
 
-@callback(
-    Output("forecast-debug", "children"),
-    Input("selected-virus", "data"),
-    Input("continent-dropdown", "value"),
-    Input("country-dropdown", "value"),
-    Input("correlation-sex", "value"),
-)
-def debug_forecast_data(virus, regions, countries, sex):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    
-    if ihme_df.empty:
-        return html.Div("No IHME data loaded", style={"color": "red"})
-    
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause_filter = cause_lookup.get((virus or "HBV").upper())
-    
-    # Check if cause exists
-    if cause_filter not in ihme_df["cause"].values:
-        return html.Div(f"Cause '{cause_filter}' not found in data", style={"color": "red"})
-    
-    # Filter data
-    base = ihme_df[
-        (ihme_df["sex"] == sex) &
-        (ihme_df["cause"] == cause_filter) &
-        (ihme_df["metric"] == "Number")
-    ].copy()
-    
-    if regions:
-        base = base[base["WHO_Regions"].isin(regions)]
-    if countries:
-        base = base[base["Country_standard"].isin(countries)]
-    
-    # Check what measures are available
-    available_measures = base["measure"].unique()
-    
-    # Get sample data
-    sample_data = base.head(3) if not base.empty else pd.DataFrame()
-    
-    return html.Div([
-        html.P(f"Virus: {virus}, Cause: {cause_filter}"),
-        html.P(f"Sex filter: {sex}"),
-        html.P(f"Available measures: {list(available_measures)}"),
-        html.P(f"Total rows: {len(base)}"),
-        html.P("Sample data:"),
-        html.Pre(sample_data[["year", "measure", "metric", "age", "sex", "val"]].to_string() if not sample_data.empty else "No data")
-    ], style={"fontSize": "10px", "color": "#666", "padding": "10px", "backgroundColor": "#f0f0f0"})
 
 #Time Series with Projections
 def get_forecast_log_axis(values):
@@ -2922,7 +2873,8 @@ def build_overview_summary_cards():
         )
 
     return dbc.Row(
-        [
+        id="overview-summary-cards-row",
+        children=[
             metric_card("fa-solid fa-dna", "indicator-total", "Sequences"),
             metric_card("fa-solid fa-globe", "indicator-countries", "Countries"),
             metric_card("fa-solid fa-code-branch", "indicator-genotypes", "Genotypes"),
@@ -2930,6 +2882,39 @@ def build_overview_summary_cards():
         ],
         className="hep-summary-row g-4",
     )
+
+
+def build_epi_summary_cards():
+    """Horizontal summary cards shown above epidemiology filters/plots."""
+    def metric_card(icon_class, value_id, label):
+        return dbc.Col(
+            html.Div(
+                className="hep-metric-card",
+                children=[
+                    html.Div(html.I(className=icon_class), className="hep-metric-icon"),
+                    html.Div([
+                        html.Div(id=value_id, className="hep-metric-value"),
+                        html.Div(label, className="hep-metric-label"),
+                    ], className="hep-metric-text"),
+                ],
+            ),
+            xs=12,
+            md=6,
+            xl=3,
+        )
+
+    return dbc.Row(
+        id="epi-summary-cards-row",
+        children=[
+            metric_card("fa-solid fa-user-shield", "epi-card-livingwith", "Living with infection"),
+            metric_card("fa-solid fa-virus-covid", "epi-card-newinfections", "New infections"),
+            metric_card("fa-solid fa-skull-crossbones", "epi-card-deaths", "Deaths"),
+            metric_card("fa-solid fa-chart-line", "epi-card-diag-treat", "Diagnosis / Treatment %"),
+        ],
+        className="hep-summary-row g-4",
+        style={"display": "none"},
+    )
+
 
 
 def make_priority_table(priority_data):
@@ -3022,10 +3007,6 @@ def create_dashboard_layout():
             dcc.Download(id="download-mutation-report"),
             html.Div(id="download-trigger", style={"display": "none"}),
             dcc.Download(id="download-data"),
-            html.Div([
-                dcc.Dropdown(id="top-countries-n", value=10),
-                dcc.Graph(id="top-countries-burden"),
-            ], style={"display": "none"}),
             *USER_SEQ_STORES(),
         ],
         style={"display": "none"},
@@ -3046,6 +3027,7 @@ def create_dashboard_layout():
                         ]
                     ),
                     build_overview_summary_cards(),
+                    build_epi_summary_cards(),
 
         # === COMMON FILTERS (ALWAYS VISIBLE) ===
         dbc.Row([
@@ -3054,53 +3036,69 @@ def create_dashboard_layout():
                 dbc.Card([
                     dbc.CardBody([
                         dbc.Row([
+                            # Year range slider (35-45% of filter row, i.e. width 5 of 12)
                             dbc.Col([
-                                dcc.Dropdown(
-                                    id="year-start-dropdown",
-                                    placeholder="Start year",
-                                    className="mb-2 mb-md-0"
-                                )
-                            ], width=2),
+                                html.Div([
+                                    html.Label("YEAR RANGE", className="fw-bold text-uppercase small mb-0", 
+                                               style={"letterSpacing": "0.05em", "color": "rgba(255,255,255,0.6)"}),
+                                    html.Span(id="year-range-label", className="fw-bold float-end text-primary", 
+                                              style={"fontSize": "0.95rem"})
+                                ], className="mb-2 clearfix"),
+                                html.Div([
+                                    dcc.RangeSlider(
+                                        id="year-range-slider",
+                                        min=1963,
+                                        max=2024,
+                                        value=[1963, 2024],
+                                        step=1,
+                                        marks={y: str(y) for y in [1963, 1970, 1980, 1990, 2000, 2010, 2020, 2024]},
+                                        tooltip={"always_visible": True, "placement": "top"},
+                                        className="hep-range-slider"
+                                    )
+                                ], style={"paddingLeft": "5px", "paddingRight": "5px"})
+                            ], xs=12, lg=5, className="mb-3 mb-lg-0"),
                             
+                            # Region dropdown
                             dbc.Col([
-                                dcc.Dropdown(
-                                    id="year-end-dropdown",
-                                    placeholder="End year",
-                                    className="mb-2 mb-md-0"
-                                )
-                            ], width=2),
-                            
-                            dbc.Col([
+                                html.Label("REGION", className="fw-bold text-uppercase small mb-2", 
+                                           style={"letterSpacing": "0.05em", "color": "rgba(255,255,255,0.6)"}),
                                 dcc.Dropdown(
                                     id="continent-dropdown",
                                     multi=True,
                                     placeholder="All regions",
-                                    className="mb-2 mb-md-0"
+                                    className="hep-dropdown"
                                 )
-                            ], width=2),
+                            ], xs=12, lg=2, className="mb-3 mb-lg-0"),
                             
+                            # Country dropdown
                             dbc.Col([
+                                html.Label("COUNTRY", className="fw-bold text-uppercase small mb-2", 
+                                           style={"letterSpacing": "0.05em", "color": "rgba(255,255,255,0.6)"}),
                                 dcc.Dropdown(
                                     id="country-dropdown",
                                     multi=True,
                                     placeholder="All countries",
-                                    className="mb-2 mb-md-0"
+                                    className="hep-dropdown"
                                 )
-                            ], width=3),
+                            ], xs=12, lg=3, className="mb-3 mb-lg-0"),
                             
+                            # Genotype dropdown
                             dbc.Col([
+                                html.Label("GENOTYPE", className="fw-bold text-uppercase small mb-2", 
+                                           style={"letterSpacing": "0.05em", "color": "rgba(255,255,255,0.6)"}),
                                 dcc.Dropdown(
                                     id="genotype-dropdown",
                                     multi=True,
                                     placeholder="All genotypes",
-                                    className="mb-2 mb-md-0"
+                                    className="hep-dropdown"
                                 )
-                            ], width=3)
-                        ])
+                            ], xs=12, lg=2)
+                        ], className="align-items-end")
                     ])
-                ], className="mb-4 shadow-sm")
+                ], className="mb-4 shadow-sm border-0")
             ], width=12)
         ], id="common-filters", style={"position": "relative", "zIndex": 100}),
+
 
         # === TAB 1: OVERVIEW CONTENT (DEFAULT) ===
         html.Div(id="overview-content", children=[
@@ -3183,17 +3181,17 @@ def create_dashboard_layout():
                 ], width=12)
             ], className="mb-4"),
 
-            # ROW 1: Global Burden Forecast and Sequencing Priority
+            # ROW 1: Burden vs. Sequencing Correlation and Sequencing Priority
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5("Burden Forecast with Projections", className="mb-3"),
+                            html.H5("Burden vs. Sequencing Correlation", className="mb-3"),
                             dcc.Loading(
                                 dcc.Graph(
-                                    id="forecast-chart",
+                                    id="burden-coverage-scatter",
                                     className="hep-graph",
-                                    config={"displayModeBar": False},
+                                    config={"displayModeBar": True, "displaylogo": False},
                                 ),
                                 type="circle"
                             )
@@ -3613,275 +3611,118 @@ def create_dashboard_layout():
                 ], width=12)
             ], className="mb-4"),
         ]),
-
-        # === TAB 3: EPIDEMIOLOGY CONTENT ===
+        # === TAB 2: MUTATIONS CONTENT (HIDDEN BY DEFAULT) ===
         html.Div(id="epidemiology-content", style={"display": "none"}, children=[
-            # Epidemiology Controls
-            dbc.Row(id="epi-filters", children=[
+            # GHO Controls Row
+            dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             dbc.Row([
                                 dbc.Col([
-                                    html.Label("Burden Metric:", className="fw-bold me-2"),
+                                    html.Label("Select Metric:", className="fw-bold me-2"),
                                     dcc.Dropdown(
-                                        id="epi-burden-metric",
+                                        id="epi-metric-dropdown",
                                         options=[
-                                            {"label": "Prevalence", "value": "Prevalence|Number"},
-                                            {"label": "Incidence", "value": "Incidence|Number"},
-                                            {"label": "Deaths", "value": "Deaths|Number"},
-                                            {"label": "Prevalence Rate", "value": "Prevalence|Rate"},
-                                            {"label": "Incidence Rate", "value": "Incidence|Rate"},
-                                            {"label": "Death Rate", "value": "Deaths|Rate"},
+                                            {"label": "People living with infection", "value": "livingwith_num"},
+                                            {"label": "New infections", "value": "new_infections_num"},
+                                            {"label": "Deaths", "value": "deaths_num"},
+                                            {"label": "Prevalence %", "value": "prevalence_pct"},
+                                            {"label": "Diagnosis rate %", "value": "diagnosis_rate_pct"},
+                                            {"label": "Treatment rate %", "value": "treatment_rate_diagnosed_pct"},
+                                            {"label": "HBV vaccine coverage % (HepB3)", "value": "vaccine_hepb3_coverage_pct"}
                                         ],
-                                        value="Prevalence|Number",
+                                        value="prevalence_pct",
                                         clearable=False,
-                                        style={"width": "200px"}
+                                        className="hep-dropdown"
                                     )
-                                ], width=3),
-                                
-                                dbc.Col([
-                                    html.Label("Age Group:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="epi-age-group",
-                                        options=[],
-                                        value="All ages",
-                                        clearable=False,
-                                        style={"width": "200px"}
-                                    )
-                                ], width=3),
-                                
-                                dbc.Col([
-                                    html.Label("Sex:", className="fw-bold me-2"),
-                                    dcc.RadioItems(
-                                        id="epi-sex-filter",
-                                        options=[
-                                            {"label": " Both", "value": "Both"},
-                                            {"label": " Male", "value": "Male"},
-                                            {"label": " Female", "value": "Female"}
-                                        ],
-                                        value="Both",
-                                        inline=True
-                                    )
-                                ], width=3),
-                                
-                                dbc.Col([
-                                    html.Label("Display Mode:", className="fw-bold me-2"),
-                                    dcc.RadioItems(
-                                        id="epi-display-mode",
-                                        options=[
-                                            {"label": " Number", "value": "Number"},
-                                            {"label": " Rate", "value": "Rate"},
-                                            {"label": " Percent", "value": "Percent"}
-                                        ],
-                                        value="Number",
-                                        inline=True
-                                    )
-                                ], width=3),
-                            ], className="g-3")
+                                ], xs=12, md=6, lg=4),
+                            ], className="g-3 align-items-center")
                         ])
-                    ], className="shadow-sm")
+                    ], className="mb-4 shadow-sm border-0")
                 ], width=12)
-            ], className="mb-4"),
-                        
-            # ROW 2: Age and Sex Analysis
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Age Distribution", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("Year:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="age-dist-year",
-                                        options=[],
-                                        placeholder="Select year...",
-                                        style={"width": "150px"}
-                                    )
-                                ], width=6),
-                                dbc.Col([
-                                    html.Label("Sex:", className="fw-bold me-2"),
-                                    dcc.RadioItems(
-                                        id="age-dist-sex",
-                                        options=[
-                                            {"label": " Both", "value": "Both"},
-                                            {"label": " Male", "value": "Male"},
-                                            {"label": " Female", "value": "Female"}
-                                        ],
-                                        value="Both",
-                                        inline=True
-                                    )
-                                ], width=6),
-                            ], className="mb-2"),
-                            dcc.Loading(
-                                dcc.Graph(id="age-distribution-chart"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=6),
-                
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Sex Ratio Over Time", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("Age Group:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="sex-ratio-age",
-                                        options=[],
-                                        value="All ages",
-                                        clearable=False,
-                                        style={"width": "200px"}
-                                    )
-                                ], width=12)
-                            ], className="mb-2"),
-                            dcc.Loading(
-                                dcc.Graph(id="sex-ratio-chart"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=6),
-            ], className="mb-4"),
+            ], id="epi-controls-row"),
 
-            # ROW 3: Regional Analysis
+            # Row 1: Map
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5("Regional Burden Comparison", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("Compare:", className="fw-bold me-2"),
-                                    dcc.RadioItems(
-                                        id="region-compare-type",
-                                        options=[
-                                            {"label": " Total", "value": "total"},
-                                            {"label": " Per Capita", "value": "per_capita"},
-                                            {"label": " Age-Standardized", "value": "age_standardized"}
-                                        ],
-                                        value="total",
-                                        inline=True
-                                    )
-                                ], width=12)
-                            ], className="mb-2"),
+                            html.H5("Global Epidemiological Burden", className="mb-3"),
                             dcc.Loading(
-                                dcc.Graph(id="region-comparison-chart"),
+                                dcc.Graph(id="gho-burden-map"),
                                 type="circle"
                             )
                         ])
-                    ], className="h-100 shadow-sm")
-                ], width=6),
-                
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Regional Age Patterns", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("Region:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="region-age-pattern",
-                                        options=[],
-                                        placeholder="Select region...",
-                                        style={"width": "200px"}
-                                    )
-                                ], width=12)
-                            ], className="mb-2"),
-                            dcc.Loading(
-                                dcc.Graph(id="region-age-pattern-chart"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=6),
-            ], className="mb-4"),
-            
-            # ROW 4: Burden vs. Sequencing Correlation
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Burden vs. Sequencing Correlation", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("Age Group:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="correlation-age",
-                                        options=[],
-                                        value="All ages",
-                                        clearable=False,
-                                        style={"width": "200px"}
-                                    )
-                                ], width=4),
-                                dbc.Col([
-                                    html.Label("Sex:", className="fw-bold me-2"),
-                                    dcc.RadioItems(
-                                        id="correlation-sex",
-                                        options=[
-                                            {"label": " Male", "value": "Male"},
-                                            {"label": " Female", "value": "Female"},
-                                            {"label": " Both (summed)", "value": "Both"}
-                                        ],
-                                        value="Both",
-                                        inline=True
-                                    )
-                                ], width=4),
-                                dbc.Col([
-                                    html.Label("Metric:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="correlation-metric",
-                                        options=[
-                                            {"label": "Prevalence", "value": "Prevalence|Number"},
-                                            {"label": "Incidence", "value": "Incidence|Number"},
-                                            {"label": "Deaths", "value": "Deaths|Number"}
-                                        ],
-                                        value="Prevalence|Number",
-                                        clearable=False,
-                                        style={"width": "200px"}
-                                    )
-                                ], width=4),
-                            ], className="mb-3"),
-                            dcc.Loading(
-                                dcc.Graph(id="burden-coverage-scatter"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
+                    ], className="shadow-sm border-0 h-100")
                 ], width=12),
             ], className="mb-4"),
-            
-            # Data Table
+
+            # Row 2: Cascade and Forecast Chart Side-by-Side
+            dbc.Row([
+                # Diagnosis & Treatment Cascade
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5("Diagnosis & Treatment Cascade", className="mb-3"),
+                            dcc.Loading(
+                                dcc.Graph(id="gho-cascade-chart"),
+                                type="circle"
+                            )
+                        ])
+                    ], className="shadow-sm border-0 h-100")
+                ], xs=12, lg=6, className="mb-4 mb-lg-0"),
+                
+                # Forecast Chart
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H5("Burden Forecast with Projections", className="mb-3"),
+                            dcc.Loading(
+                                dcc.Graph(
+                                    id="forecast-chart",
+                                    className="hep-graph",
+                                    config={"displayModeBar": True, "displaylogo": False},
+                                ),
+                                type="circle"
+                            )
+                        ])
+                    ], className="shadow-sm border-0 h-100")
+                ], xs=12, lg=6)
+            ], className="mb-4"),
+
+            # Row 3: Detailed DataTable
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             html.Div([
-                                html.H5("Detailed Epidemiology Data", className="d-inline mb-0"),
-                                dbc.Button(
-                                    "Back to Overview",
-                                    id="btn-back-to-overview-from-epi",
-                                    color="primary",
-                                    size="sm",
-                                    className="float-end"
-                                ),
-                                dbc.Button(
-                                    "Download Data",
-                                    id="btn-download-epi",
-                                    color="secondary",
-                                    size="sm",
-                                    className="float-end me-2"
-                                ),
+                                html.H5("WHO GHO Country Profile Data", className="d-inline mb-0"),
+                                html.Div([
+                                    dbc.Button(
+                                        "Back to Overview",
+                                        id="btn-back-to-overview-from-epi",
+                                        color="primary",
+                                        size="sm",
+                                        className="me-2"
+                                    ),
+                                    dbc.Button(
+                                        "Download Data",
+                                        id="btn-download-epi",
+                                        color="secondary",
+                                        size="sm",
+                                    ),
+                                ], className="d-flex align-items-center"),
                                 dcc.Download(id="download-epi-data")
-                            ], className="mb-3"),
-                            html.Div(id="epidemiology-data-table")
+                            ], className="mb-3 d-flex justify-content-between align-items-center flex-wrap"),
+                            dcc.Loading(
+                                html.Div(id="gho-data-table"),
+                                type="circle"
+                            )
                         ])
-                    ], className="shadow-sm")
+                    ], className="shadow-sm border-0")
                 ], width=12)
-            ], className="mb-4"),
+            ], className="mb-4")
         ]),
 
         # === TAB 4: USER SEQUENCE SUBMISSION ===
@@ -3947,13 +3788,12 @@ def _show_toast(n): return True
 @callback(
     Output("filtered-store", "data"),
     Input("selected-virus", "data"),
-    Input("year-start-dropdown", "value"),
-    Input("year-end-dropdown", "value"),
+    Input("year-range-slider", "value"),
     Input("continent-dropdown", "value"),
     Input("country-dropdown", "value"),
     Input("genotype-dropdown", "value"),
 )
-def compute_filtered_store(virus, start_year, end_year, regions, countries, genotypes):
+def compute_filtered_store(virus, year_range, regions, countries, genotypes):
     data = get_data_store()  # UPDATED
     if data['hbv_data'].empty and data['hcv_data'].empty:
         return _df_to_json(pd.DataFrame())
@@ -3972,8 +3812,8 @@ def compute_filtered_store(virus, start_year, end_year, regions, countries, geno
 
     # default bounds
     ymin, ymax = int(base["Year"].min()), int(base["Year"].max())
-    y0 = int(start_year) if start_year is not None else ymin
-    y1 = int(end_year) if end_year is not None else ymax
+    y0 = int(year_range[0]) if year_range and len(year_range) == 2 else ymin
+    y1 = int(year_range[1]) if year_range and len(year_range) == 2 else ymax
     
     if y0 > y1:
         y0, y1 = y1, y0
@@ -3995,15 +3835,14 @@ def compute_filtered_store(virus, start_year, end_year, regions, countries, geno
     Output("gap-store", "data"),
     Input("filtered-store", "data"),
     Input("selected-virus", "data"),
-    Input("epi-burden-metric", "value"),
-    Input("epi-sex-filter", "value"),   # ✅ Changed to epi-sex-filter
+    Input("ihme-metric-type", "value"),
 )
-def update_gap_store(filtered_json, virus, ihme_metric_choice, sex):
+def update_gap_store(filtered_json, virus, ihme_metric_choice):
     return compute_gap_from_filtered(
         filtered_json=filtered_json,
         virus=virus,
         ihme_metric_choice=ihme_metric_choice,
-        sex=sex,
+        sex="Both",
     )
 def compute_gap_from_filtered(
     filtered_json,
@@ -4043,13 +3882,12 @@ def compute_gap_from_filtered(
     Output("ihme-latest-store", "data"),
     Input("selected-virus", "data"),
     Input("ihme-metric-type", "value"),
-    Input("year-start-dropdown", "value"),
-    Input("year-end-dropdown", "value"),
+    Input("year-range-slider", "value"),
     Input("continent-dropdown", "value"),
     Input("country-dropdown", "value"),
-    Input("correlation-sex", "value"),  # Make sure this is the right sex selector
 )
-def compute_ihme_latest_store(virus, metric, start_year, end_year, regions, countries, sex):
+def compute_ihme_latest_store(virus, metric, year_range, regions, countries):
+    sex = "Both"
     data = get_data_store()
     
     # default bounds
@@ -4067,8 +3905,8 @@ def compute_ihme_latest_store(virus, metric, start_year, end_year, regions, coun
     else:
         ymin, ymax = int(base["Year"].min()), int(base["Year"].max())
         
-    y0 = int(start_year) if start_year is not None else ymin
-    y1 = int(end_year) if end_year is not None else ymax
+    y0 = int(year_range[0]) if year_range and len(year_range) == 2 else ymin
+    y1 = int(year_range[1]) if year_range and len(year_range) == 2 else ymax
     
     if y0 > y1:
         y0, y1 = y1, y0
@@ -4087,6 +3925,35 @@ def compute_ihme_latest_store(virus, metric, start_year, end_year, regions, coun
     
     return _df_to_json(df)
     
+# Overview Page Forecast Chart Callback
+@callback(
+    Output("forecast-chart", "figure"),
+    Input("selected-virus", "data"),
+    Input("continent-dropdown", "value"),
+    Input("country-dropdown", "value"),
+)
+def update_overview_forecast_chart(virus, regions, countries):
+    data = get_data_store()
+    ihme_df = data.get("ihme_df", pd.DataFrame())
+    if ihme_df.empty:
+        return _empty_plot("No historical GBD data available")
+        
+    fig = create_forecast_chart(
+        ihme_df=ihme_df,
+        selected_virus=virus,
+        sex="Both",
+        selected_regions=regions,
+        selected_countries=countries
+    )
+    
+    # Apply dark theme styling
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="rgba(255,255,255,0.7)"),
+    )
+    return fig
+
 # — Indicator values —
 @callback(
     Output("indicator-total", "children"),
@@ -4243,10 +4110,9 @@ def navigate_from_quick_buttons(forecast_clicks, priority_clicks, timeline_click
     Input("selected-virus", "data"),
     Input("continent-dropdown", "value"),
     Input("country-dropdown", "value"),
-    Input("year-start-dropdown", "value"),
-    Input("year-end-dropdown", "value"),
+    Input("year-range-slider", "value"),
 )
-def update_mutation_section(filtered_json, selected_virus, regions, countries, start_year, end_year):
+def update_mutation_section(filtered_json, selected_virus, regions, countries, year_range):
     """Updates the mutation section based on selected virus and filters"""
     
     data = get_data_store()
@@ -4265,8 +4131,8 @@ def update_mutation_section(filtered_json, selected_virus, regions, countries, s
     else:
         ymin, ymax = int(base["Year"].min()), int(base["Year"].max())
         
-    y0 = int(start_year) if start_year is not None else ymin
-    y1 = int(end_year) if end_year is not None else ymax
+    y0 = int(year_range[0]) if year_range and len(year_range) == 2 else ymin
+    y1 = int(year_range[1]) if year_range and len(year_range) == 2 else ymax
     
     if y0 > y1:
         y0, y1 = y1, y0
@@ -5128,29 +4994,48 @@ def update_tab_highlights(pathname, overview_clicks, mutations_clicks, epidemiol
 # Client-side tab switching callback to avoid nonexistent DOM errors on page loading/switching
 dash.clientside_callback(
     """
-    function(activeTab, pathname) {
+    function(activeTab, pathname, overviewId) {
         // If we are not on the dashboard page, do nothing to prevent nonexistent object errors
         if (pathname !== "/" && pathname !== "/dashboard") {
-            return [window.dash_clientside.no_update, window.dash_clientside.no_update, window.dash_clientside.no_update, window.dash_clientside.no_update, window.dash_clientside.no_update];
+            return [
+                window.dash_clientside.no_update, 
+                window.dash_clientside.no_update, 
+                window.dash_clientside.no_update, 
+                window.dash_clientside.no_update, 
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update
+            ];
         }
         
         // Verify that the elements actually exist in the DOM before trying to update them
         const overview = document.getElementById("overview-content");
         if (!overview) {
-            return [window.dash_clientside.no_update, window.dash_clientside.no_update, window.dash_clientside.no_update, window.dash_clientside.no_update, window.dash_clientside.no_update];
+            return [
+                window.dash_clientside.no_update, 
+                window.dash_clientside.no_update, 
+                window.dash_clientside.no_update, 
+                window.dash_clientside.no_update, 
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update
+            ];
         }
         
-        const show = {"display": "block"};
+        const showBlock = {"display": "block"};
+        const showFlex = {"display": "flex"};
         const hide = {"display": "none"};
         
         const active = activeTab || "overview";
         
         return [
-            active === "overview" ? show : hide,
-            active === "mutations" ? show : hide,
-            active === "epidemiology" ? show : hide,
-            active === "user-seq" ? show : hide,
-            active === "user-seq" ? hide : show
+            active === "overview" ? showBlock : hide,
+            active === "mutations" ? showBlock : hide,
+            active === "epidemiology" ? showBlock : hide,
+            active === "user-seq" ? showBlock : hide,
+            active === "user-seq" ? hide : showBlock,
+            (active !== "epidemiology" && active !== "user-seq") ? showFlex : hide,
+            active === "epidemiology" ? showFlex : hide
         ];
     }
     """,
@@ -5159,9 +5044,12 @@ dash.clientside_callback(
     Output("epidemiology-content", "style"),
     Output("user-seq-content", "style"),
     Output("common-filters", "style"),
+    Output("overview-summary-cards-row", "style"),
+    Output("epi-summary-cards-row", "style"),
     Input("active-tab-store", "data"),
     Input("url", "pathname"),
-    prevent_initial_call=False
+    Input("overview-content", "id"),
+    prevent_initial_call=True
 )
 
 
@@ -5637,11 +5525,10 @@ def update_mutation_details_table(filtered_json, virus, mutation_type, category)
     State("selected-virus", "data"),
     State("continent-dropdown", "value"),
     State("country-dropdown", "value"),
-    State("year-start-dropdown", "value"),
-    State("year-end-dropdown", "value"),
+    State("year-range-slider", "value"),
     prevent_initial_call=True
 )
-def download_mutation_report(n_clicks, filtered_json, virus, regions, countries, start_year, end_year):
+def download_mutation_report(n_clicks, filtered_json, virus, regions, countries, year_range):
     if not n_clicks:
         return dash.no_update
     
@@ -5661,8 +5548,8 @@ def download_mutation_report(n_clicks, filtered_json, virus, regions, countries,
     else:
         ymin, ymax = int(base["Year"].min()), int(base["Year"].max())
         
-    y0 = int(start_year) if start_year is not None else ymin
-    y1 = int(end_year) if end_year is not None else ymax
+    y0 = int(year_range[0]) if year_range and len(year_range) == 2 else ymin
+    y1 = int(year_range[1]) if year_range and len(year_range) == 2 else ymax
     
     if y0 > y1:
         y0, y1 = y1, y0
@@ -5792,23 +5679,207 @@ def download_mutation_data(n_clicks, filtered_json, virus, mutation_type, catego
     # Return CSV
     return dcc.send_data_frame(filtered_mutations.to_csv, filename, index=False)
 
-# Forecast Chart Callback
+# Burden vs. Sequencing Correlation Callback
 @callback(
-    Output("forecast-chart", "figure"),
+    Output("burden-coverage-scatter", "figure"),
     Input("selected-virus", "data"),
+    Input("ihme-metric-type", "value"),
+    Input("filtered-store", "data"),
     Input("continent-dropdown", "value"),
     Input("country-dropdown", "value"),
-    Input("correlation-sex", "value"),
 )
-def update_forecast_chart(virus, regions, countries, sex):
+def update_burden_coverage_scatter(virus, metric_choice, filtered_json, regions, countries):
     data = get_data_store()
-    return create_forecast_chart(
-        data["ihme_df"],
-        virus or "HBV",
-        sex or "Both",
-        regions, 
-        countries
+    ihme_df = data["ihme_df"]
+    
+    seq_df = _df_from_json(filtered_json)
+    if seq_df.empty or ihme_df.empty:
+        return _empty_plot("No sequence data or GBD data matching criteria")
+        
+    # Get active years and genotypes from seq_df
+    y0, y1 = seq_df["Year"].min(), seq_df["Year"].max()
+    active_genotypes = seq_df["genotype"].unique()
+    
+    # Get original sequence database for this virus to calculate global/regional counts
+    if virus == "HBV":
+        base_seq = data['hbv_data']
+    elif virus == "HCV":
+        base_seq = data['hcv_data']
+    elif virus == "HEV":
+        base_seq = data['hev_data']
+    else:
+        base_seq = data['hbv_data']
+        
+    if base_seq.empty:
+        return _empty_plot("No sequence data available")
+        
+    # Filter sequences ignoring country constraint
+    filtered_seq = base_seq[
+        (base_seq["Year"] >= y0) &
+        (base_seq["Year"] <= y1)
+    ]
+    if regions:
+        filtered_seq = filtered_seq[filtered_seq["WHO_Regions"].isin(regions)]
+    if len(active_genotypes) > 0:
+        filtered_seq = filtered_seq[filtered_seq["genotype"].isin(active_genotypes)]
+        
+    # Get sequence counts by country
+    seq_counts = filtered_seq.groupby("Country_standard").size().reset_index(name="sequence_count")
+    
+    # Parse GBD measure & metric directly from metric_choice (e.g. Prevalence|Number)
+    try:
+        measure, metric_type = metric_choice.split("|")
+    except:
+        measure, metric_type = "Prevalence", "Number"
+        
+    cause_lookup = {
+        "HBV": "Total burden related to hepatitis B",
+        "HCV": "Total burden related to hepatitis C",
+        "HEV": "Total burden related to hepatitis E",
+    }
+    cause = cause_lookup.get((virus or "HBV").upper())
+    
+    # Filter GBD data (Both sexes, sum of age groups)
+    male_data = ihme_df[
+        (ihme_df["sex"] == "Male") &
+        (ihme_df["cause"] == cause) &
+        (ihme_df["measure"] == measure) &
+        (ihme_df["metric"] == metric_type)
+    ].copy()
+    
+    female_data = ihme_df[
+        (ihme_df["sex"] == "Female") &
+        (ihme_df["cause"] == cause) &
+        (ihme_df["measure"] == measure) &
+        (ihme_df["metric"] == metric_type)
+    ].copy()
+    
+    burden_data = pd.concat([male_data, female_data], ignore_index=True)
+    
+    if burden_data.empty:
+        return _empty_plot("No GBD burden data found")
+        
+    # Apply region filter only (ignore country dropdown for background dots)
+    if regions:
+        burden_data = burden_data[burden_data["WHO_Regions"].isin(regions)]
+        
+    if burden_data.empty:
+        return _empty_plot("No GBD burden data matching criteria")
+        
+    # Pick the latest year in GBD data
+    latest_year = int(burden_data["year"].max())
+    burden_latest = burden_data[burden_data["year"] == latest_year]
+    
+    # Aggregate burden by country (mean for percents/rates, sum for counts)
+    if metric_type in ["Percent", "Rate"]:
+        country_burden = burden_latest.groupby("Country_standard")["val"].mean().reset_index(name="burden_val")
+    else:
+        country_burden = burden_latest.groupby("Country_standard")["val"].sum().reset_index(name="burden_val")
+        
+    # Merge GBD burden and sequence counts
+    merged = pd.merge(country_burden, seq_counts, on="Country_standard", how="inner")
+    
+    if merged.empty:
+        return _empty_plot("No overlapping data between GBD burden and sequencing counts")
+        
+    virus_color = VIRUS_COLORS.get((virus or "HBV").upper(), "#E84057")
+    metric_label = f"{measure} ({metric_type})"
+    
+    # Separate into selected (highlighted) and unselected (background) countries
+    if countries:
+        selected_merged = merged[merged["Country_standard"].isin(countries)]
+        unselected_merged = merged[~merged["Country_standard"].isin(countries)]
+    else:
+        selected_merged = merged
+        unselected_merged = pd.DataFrame(columns=merged.columns)
+        
+    fig = go.Figure()
+    
+    # 1. Background / Unselected countries
+    if not unselected_merged.empty:
+        fig.add_trace(go.Scatter(
+            x=unselected_merged["burden_val"],
+            y=unselected_merged["sequence_count"],
+            mode="markers",
+            name="Other Countries",
+            marker=dict(
+                size=10,
+                color="rgba(255, 255, 255, 0.15)",
+                line=dict(width=1, color="rgba(255, 255, 255, 0.25)")
+            ),
+            hovertext=unselected_merged["Country_standard"],
+            hovertemplate="<b>%{hovertext}</b><br>" + metric_label + ": %{x:,.2f}<br>Sequences: %{y:,}<extra></extra>"
+        ))
+        
+    # 2. Highlighted / Selected countries
+    if not selected_merged.empty:
+        fig.add_trace(go.Scatter(
+            x=selected_merged["burden_val"],
+            y=selected_merged["sequence_count"],
+            mode="markers",
+            name="Selected Country" if countries else "Countries",
+            marker=dict(
+                size=12,
+                color=virus_color,
+                opacity=0.9,
+                line=dict(width=1.5, color="white")
+            ),
+            hovertext=selected_merged["Country_standard"],
+            hovertemplate="<b>%{hovertext}</b><br>" + metric_label + ": %{x:,.2f}<br>Sequences: %{y:,}<extra></extra>"
+        ))
+        
+    # 3. Add global trend line (calculated on ALL countries matching active filters)
+    if len(merged) > 1:
+        try:
+            x = np.log10(merged["burden_val"] + 1e-9)
+            y = np.log10(merged["sequence_count"] + 1e-9)
+            coefficients = np.polyfit(x, y, 1)
+            polynomial = np.poly1d(coefficients)
+            x_line = np.linspace(x.min(), x.max(), 100)
+            y_line = polynomial(x_line)
+            
+            fig.add_trace(go.Scatter(
+                x=10**x_line,
+                y=10**y_line,
+                mode='lines',
+                name='Global Trend Line' if not regions else 'Regional Trend Line',
+                line=dict(color='#FF4D6D', dash='dash', width=2),
+                hovertemplate='Trend Line<extra></extra>'
+            ))
+        except Exception:
+            pass
+            
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="rgba(255,255,255,0.7)"),
+        xaxis=dict(
+            title=metric_label,
+            type="log",
+            gridcolor="rgba(255,255,255,0.08)",
+            linecolor="rgba(255,255,255,0.25)",
+            showgrid=True,
+            zeroline=False,
+        ),
+        yaxis=dict(
+            title="Number of Sequences",
+            type="log",
+            gridcolor="rgba(255,255,255,0.08)",
+            linecolor="rgba(255,255,255,0.25)",
+            showgrid=True,
+            zeroline=False,
+        ),
+        title=dict(
+            text=f"Burden vs. Sequences Correlation ({virus or 'HBV'}, {latest_year})",
+            font=dict(color="white", size=14)
+        ),
+        height=400,
+        margin=dict(l=40, r=20, t=40, b=40),
+        hovermode="closest",
+        showlegend=True
     )
+    
+    return fig
     
 @callback(
     Output("mutation-timeline", "figure"),
@@ -5874,1321 +5945,357 @@ def update_priority_ranking_responsive(gap_json, virus):
     return make_priority_table(priority_df), _df_to_json(priority_df)
     
 # === EPIDEMIOLOGY CALLBACKS ===
+
+
+def format_big_number(val):
+    if pd.isna(val) or val is None or val == 0:
+        return "N/A"
+    if val >= 1_000_000:
+        return f"{val / 1_000_000:.1f}M"
+    if val >= 1_000:
+        return f"{val / 1_000:.1f}k"
+    return f"{int(val):,}"
+
+
 @callback(
-    Output("correlation-age", "options"),
-    Output("correlation-age", "value"),
+    Output("epi-metric-dropdown", "options"),
+    Output("epi-metric-dropdown", "value"),
     Input("selected-virus", "data"),
-    Input("correlation-metric", "value"),
+    State("epi-metric-dropdown", "value"),
 )
-def update_correlation_age_options(virus, metric):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    
-    if ihme_df.empty:
-        options = [{"label": "All ages", "value": "All ages"}]
-        return options, "All ages"
-    
-    # Parse metric
-    try:
-        measure, metric_type = metric.split("|")
-    except:
-        measure, metric_type = "Prevalence", "Number"
-    
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause = cause_lookup.get((virus or "HBV").upper())
-    
-    # Get available age groups for this cause and metric
-    filtered = ihme_df[
-        (ihme_df["cause"] == cause) &
-        (ihme_df["measure"] == measure) &
-        (ihme_df["metric"] == metric_type)
+def update_epi_metric_dropdown_options(virus, current_val):
+    options = [
+        {"label": "People living with infection", "value": "livingwith_num"},
+        {"label": "New infections", "value": "new_infections_num"},
+        {"label": "Deaths", "value": "deaths_num"},
+        {"label": "Prevalence %", "value": "prevalence_pct"},
+        {"label": "Diagnosis rate %", "value": "diagnosis_rate_pct"},
+        {"label": "Treatment rate %", "value": "treatment_rate_diagnosed_pct"}
     ]
     
-    if filtered.empty:
-        # Fall back to all age groups for this cause
-        filtered = ihme_df[ihme_df["cause"] == cause]
-    
-    # Get unique age groups and sort them logically
-    age_groups = sorted(filtered["age"].dropna().unique())
-    
-    # Try to sort age groups in a logical order
-    def sort_age_key(age):
-        if not isinstance(age, str):
-            return float('inf')
+    if virus == "HBV":
+        options.append({"label": "HBV vaccine coverage % (HepB3)", "value": "vaccine_hepb3_coverage_pct"})
         
-        age_lower = age.lower()
-        
-        # Handle months first
-        if 'month' in age_lower:
-            nums = re.findall(r'\d+', age)
-            if nums:
-                return int(nums[0]) - 1000
-        
-        # Handle years
-        elif 'year' in age_lower:
-            if '<' in age:
-                nums = re.findall(r'\d+', age)
-                if nums:
-                    return int(nums[0]) - 500
-            elif '-' in age:
-                nums = re.findall(r'\d+', age)
-                if nums:
-                    return int(nums[0])
-        
-        return float('inf')
+    valid_vals = [opt["value"] for opt in options]
+    val = current_val if current_val in valid_vals else "prevalence_pct"
     
-    try:
-        age_groups.sort(key=sort_age_key)
-    except:
-        age_groups.sort()
-    
-    # Create options - include "All ages" first
-    options = [{"label": "All ages (sum of all age groups)", "value": "All ages"}]
-    
-    # Add actual age groups
-    for age in age_groups:
-        if age != "All ages":
-            options.append({"label": age, "value": age})
-    
-    # Default value
-    default_value = "All ages"
-    
-    return options, default_value
+    return options, val
+
 
 @callback(
-    Output("global-burden-timeline", "figure"),
+    Output("epi-card-livingwith", "children"),
+    Output("epi-card-newinfections", "children"),
+    Output("epi-card-deaths", "children"),
+    Output("epi-card-diag-treat", "children"),
     Input("selected-virus", "data"),
-    Input("epi-burden-metric", "value"),
-    Input("epi-age-group", "value"),
-    Input("epi-sex-filter", "value"),
     Input("continent-dropdown", "value"),
     Input("country-dropdown", "value"),
-    Input("epi-display-mode", "value"),
 )
-def update_global_burden_timeline(virus, metric, age_group, sex, regions, countries, display_mode):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    
-    if ihme_df.empty:
-        return _empty_plot("No IHME data available")
-    
-    # Parse metric
-    try:
-        measure, metric_type = metric.split("|")
-        if display_mode in ["Rate", "Percent", "Number"]:
-            metric_type = display_mode
-    except:
-        measure, metric_type = "Prevalence", display_mode or "Number"
-    
-    # Filter data
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause = cause_lookup.get((virus or "HBV").upper())
-    
-    # CORRECTED: Handle "Both" sexes by getting data for each sex separately
-    if sex == "Both":
-        # Get data for Male and Female separately
-        if age_group == "All ages":
-            male_data = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == "Male")
-            ].copy()
-            female_data = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == "Female")
-            ].copy()
-        else:
-            male_data = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == "Male")
-            ].copy()
-            female_data = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == "Female")
-            ].copy()
+def update_epi_summary_cards(virus, regions, countries):
+    if virus not in ["HBV", "HCV"]:
+        return "N/A", "N/A", "N/A", "N/A"
         
-        # Combine the data (sum will happen in groupby)
-        filtered = pd.concat([male_data, female_data])
-    else:
-        # Use the sex as-is
-        if age_group == "All ages":
-            filtered = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == sex)
-            ].copy()
-        else:
-            filtered = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == sex)
-            ].copy()
+    data = get_data_store()
+    who_gho_df = data.get("who_gho_df", pd.DataFrame())
     
-    # Apply region/country filters
+    if who_gho_df.empty:
+        return "N/A", "N/A", "N/A", "N/A"
+        
+    df = who_gho_df[who_gho_df["year"] == 2022]
+    
     if regions:
-        filtered = filtered[filtered["WHO_Regions"].isin(regions)]
+        df = df[df["WHO_Regions"].isin(regions)]
     if countries:
-        filtered = filtered[filtered["Country_standard"].isin(countries)]
-    
-    if filtered.empty:
-        return _empty_plot(f"No {measure} data found for {virus} ({age_group}, {sex})")
-    
-    # Aggregate by year - this will sum Male and Female when sex="Both"
-    yearly = filtered.groupby("year")["val"].sum().reset_index()
-    yearly = yearly.sort_values("year")
-    
-    # Create figure
-    fig = px.line(
-        yearly,
-        x="year",
-        y="val",
-        markers=True,
-        title=f"{measure} Trend ({virus}, {age_group}, {sex})"
-    )
-    
-    fig.update_traces(
-        line=dict(width=3),
-        hovertemplate="Year: %{x}<br>Value: %{y:,.2f}<extra></extra>"
-    )
-    
-    fig.update_layout(
-        height=400,
-        xaxis_title="Year",
-        yaxis_title=f"{measure} ({metric_type})",
-        hovermode="x unified"
-    )
-    
-    return fig
-
-
-@callback(
-    Output("top-countries-burden", "figure"),
-    Input("selected-virus", "data"),
-    Input("epi-burden-metric", "value"),
-    Input("epi-age-group", "value"),
-    Input("epi-sex-filter", "value"),
-    Input("continent-dropdown", "value"),
-    Input("top-countries-n", "value"),
-)
-def update_top_countries_burden(virus, metric, age_group, sex, regions, top_n):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    
-    if ihme_df.empty:
-        return _empty_plot("No IHME data available")
-    
-    # Parse metric
-    try:
-        measure, metric_type = metric.split("|")
-    except:
-        measure, metric_type = "Prevalence", "Number"
-    
-    # Filter data
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause = cause_lookup.get((virus or "HBV").upper())
-    
-    # Handle "Both" sexes by summing Male and Female
-    if sex == "Both":
-        # Get Male data
-        if age_group == "All ages":
-            filtered_male = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == "Male")
-            ].copy()
-        else:
-            filtered_male = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == "Male")
-            ].copy()
+        df = df[df["Country_standard"].isin(countries)]
         
-        # Get Female data
-        if age_group == "All ages":
-            filtered_female = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == "Female")
-            ].copy()
-        else:
-            filtered_female = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == "Female")
-            ].copy()
+    if df.empty:
+        return "N/A", "N/A", "N/A", "N/A"
         
-        # Combine Male and Female data
-        filtered = pd.concat([filtered_male, filtered_female])
+    prefix = virus.lower() + "_"
+    
+    livingwith_col = f"{prefix}livingwith_num"
+    livingwith_val = df[livingwith_col].sum() if livingwith_col in df.columns else 0
+    
+    newinfections_col = f"{prefix}new_infections_num"
+    newinfections_val = df[newinfections_col].sum() if newinfections_col in df.columns else 0
+    
+    deaths_col = f"{prefix}deaths_num"
+    deaths_val = df[deaths_col].sum() if deaths_col in df.columns else 0
+    
+    diagnosed_col = f"{prefix}diagnosed_num"
+    treatment_col = f"{prefix}treatment_num" if virus == "HBV" else f"{prefix}treatment_cumulative_num"
+    
+    diag_rate_col = f"{prefix}diagnosis_rate_pct"
+    treat_rate_col = f"{prefix}treatment_rate_diagnosed_pct"
+    
+    sum_livingwith = df[livingwith_col].sum() if livingwith_col in df.columns else 0
+    sum_diagnosed = df[diagnosed_col].sum() if diagnosed_col in df.columns else 0
+    sum_treated = df[treatment_col].sum() if treatment_col in df.columns else 0
+    
+    if sum_livingwith > 0 and sum_diagnosed > 0:
+        diag_rate = (sum_diagnosed / sum_livingwith) * 100.0
     else:
-        # Use the sex as-is
-        if age_group == "All ages":
-            filtered = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == sex)
-            ].copy()
-        else:
-            filtered = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == sex)
-            ].copy()
-    
-    # Apply region filter
-    if regions:
-        filtered = filtered[filtered["WHO_Regions"].isin(regions)]
-    
-    if filtered.empty:
-        return _empty_plot(f"No {measure} data for {virus}")
-    
-    # Get latest year
-    if filtered["year"].notna().any():
-        latest_year = filtered["year"].max()
-        latest_data = filtered[filtered["year"] == latest_year]
+        diag_rate = df[diag_rate_col].mean() if diag_rate_col in df.columns else np.nan
+        
+    if sum_diagnosed > 0 and sum_treated > 0:
+        treat_rate = (sum_treated / sum_diagnosed) * 100.0
     else:
-        return _empty_plot("No valid year data")
+        treat_rate = df[treat_rate_col].mean() if treat_rate_col in df.columns else np.nan
+        
+    diag_str = f"{diag_rate:.1f}%" if not pd.isna(diag_rate) else "N/A"
+    treat_str = f"{treat_rate:.1f}%" if not pd.isna(treat_rate) else "N/A"
+    diag_treat_str = f"{diag_str} / {treat_str}"
     
-    if latest_data.empty:
-        return _empty_plot(f"No data for year {latest_year}")
-    
-    # Aggregate by country
-    country_data = latest_data.groupby("Country_standard")["val"].sum().reset_index()
-    country_data = country_data.sort_values("val", ascending=False).head(top_n)
-    
-    # Create horizontal bar chart
-    fig = px.bar(
-        country_data,
-        y="Country_standard",
-        x="val",
-        orientation="h",
-        color="val",
-        color_continuous_scale="Reds",
-        title=f"Top {top_n} Countries by {measure} ({latest_year}, {age_group}, {sex})"
+    return (
+        format_big_number(livingwith_val),
+        format_big_number(newinfections_val),
+        format_big_number(deaths_val),
+        diag_treat_str
     )
-    
-    fig.update_traces(
-        hovertemplate="<b>%{y}</b><br>%{x:,.2f}<extra></extra>"
-    )
-    
-    fig.update_layout(
-        height=400,
-        xaxis_title=f"{measure} ({metric_type})",
-        yaxis_title="Country",
-        yaxis={'categoryorder': 'total ascending'},
-        coloraxis_showscale=False
-    )
-    
-    return fig
 
 
 @callback(
-    Output("age-dist-year", "options"),
-    Output("age-dist-year", "value"),
+    Output("gho-burden-map", "figure"),
     Input("selected-virus", "data"),
-    Input("epi-burden-metric", "value"),
-    Input("epi-sex-filter", "value"),
-    Input("continent-dropdown", "value"),
-)
-def update_age_dist_year_options(virus, metric, sex, regions):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    
-    if ihme_df.empty:
-        return [], None
-    
-    # Parse metric
-    try:
-        measure, metric_type = metric.split("|")
-    except:
-        measure, metric_type = "Prevalence", "Number"
-    
-    # Filter data
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause = cause_lookup.get((virus or "HBV").upper())
-    
-    # Get available years
-    filtered = ihme_df[
-        (ihme_df["cause"] == cause) &
-        (ihme_df["measure"] == measure) &
-        (ihme_df["metric"] == metric_type)
-    ]
-    
-    # Apply region filter
-    if regions:
-        filtered = filtered[filtered["WHO_Regions"].isin(regions)]
-    
-    if filtered.empty:
-        return [], None
-    
-    # Get available years
-    years = sorted(filtered["year"].unique(), reverse=True)
-    options = [{"label": str(year), "value": year} for year in years]
-    
-    return options, years[0] if years else None
-
-
-@callback(
-    Output("age-distribution-chart", "figure"),
-    Input("selected-virus", "data"),
-    Input("epi-burden-metric", "value"),
-    Input("age-dist-year", "value"),
-    Input("age-dist-sex", "value"),  # This should be "Both", "Male", or "Female"
+    Input("epi-metric-dropdown", "value"),
     Input("continent-dropdown", "value"),
     Input("country-dropdown", "value"),
 )
-def update_age_distribution_chart(virus, metric, year, sex, regions, countries):
+def update_gho_burden_map(virus, metric, regions, countries):
+    if virus not in ["HBV", "HCV"]:
+        return _empty_plot("WHO GHO country profile data is only available for Hepatitis B and Hepatitis C.")
+        
+    if not metric:
+        return _empty_plot("Select a metric to view the map")
+        
     data = get_data_store()
-    ihme_df = data["ihme_df"]
+    who_gho_df = data.get("who_gho_df", pd.DataFrame())
     
-    if ihme_df.empty or not year:
-        return _empty_plot("No data available")
-    
-    # Parse metric
-    try:
-        measure, metric_type = metric.split("|")
-    except:
-        measure, metric_type = "Prevalence", "Number"
-    
-    # Filter data
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause = cause_lookup.get((virus or "HBV").upper())
-    
-    # CORRECTED: Handle "Both" sexes
-    if sex == "Both":
-        # Get Male and Female data separately
-        male_data = ihme_df[
-            (ihme_df["cause"] == cause) &
-            (ihme_df["measure"] == measure) &
-            (ihme_df["metric"] == metric_type) &
-            (ihme_df["year"] == year) &
-            (ihme_df["sex"] == "Male")
-        ].copy()
+    if who_gho_df.empty:
+        return _empty_plot("No WHO GHO data available")
         
-        female_data = ihme_df[
-            (ihme_df["cause"] == cause) &
-            (ihme_df["measure"] == measure) &
-            (ihme_df["metric"] == metric_type) &
-            (ihme_df["year"] == year) &
-            (ihme_df["sex"] == "Female")
-        ].copy()
+    prefix = virus.lower() + "_"
+    col_name = prefix + metric
+    
+    if col_name not in who_gho_df.columns:
+        return _empty_plot(f"Metric '{metric}' not found for virus {virus}")
         
-        # Combine Male and Female data
-        filtered = pd.concat([male_data, female_data])
+    if metric == "vaccine_hepb3_coverage_pct":
+        non_null_years = who_gho_df[who_gho_df[col_name].notna()]["year"]
+        map_year = int(non_null_years.max()) if not non_null_years.empty else 2022
     else:
-        # Use the sex as-is
-        filtered = ihme_df[
-            (ihme_df["cause"] == cause) &
-            (ihme_df["measure"] == measure) &
-            (ihme_df["metric"] == metric_type) &
-            (ihme_df["year"] == year) &
-            (ihme_df["sex"] == sex)
-        ].copy()
+        map_year = 2022
+        
+    df = who_gho_df[who_gho_df["year"] == map_year]
     
-    # Exclude "All ages" for age distribution chart
-    filtered = filtered[filtered["age"] != "All ages"]
-    
-    # Apply filters
     if regions:
-        filtered = filtered[filtered["WHO_Regions"].isin(regions)]
+        df = df[df["WHO_Regions"].isin(regions)]
     if countries:
-        filtered = filtered[filtered["Country_standard"].isin(countries)]
-    
-    if filtered.empty:
-        return _empty_plot(f"No age-specific data for {year} ({sex})")
-    
-    # Aggregate data by age - this will sum when sex="Both"
-    age_data = filtered.groupby("age")["val"].sum().reset_index()
-    
-    # Sort age groups logically
-    def sort_age_key(age):
-        # Custom sorting logic for age groups
-        if not isinstance(age, str):
-            return float('inf')
+        df = df[df["Country_standard"].isin(countries)]
         
-        age_lower = age.lower()
+    if df.empty or df[col_name].isna().all():
+        return _empty_plot(f"No data available for year {map_year} with current filters")
         
-        # Handle months
-        if 'month' in age_lower:
-            nums = re.findall(r'\d+', age)
-            if nums:
-                return int(nums[0]) - 1000
-        
-        # Handle years
-        elif 'year' in age_lower:
-            if '<' in age:
-                nums = re.findall(r'\d+', age)
-                if nums:
-                    return int(nums[0]) - 500
-            elif '-' in age:
-                nums = re.findall(r'\d+', age)
-                if nums:
-                    return int(nums[0])
-        
-        return float('inf')
+    metric_labels = {
+        "livingwith_num": "People living with infection",
+        "new_infections_num": "New infections",
+        "deaths_num": "Deaths",
+        "prevalence_pct": "Prevalence %",
+        "diagnosis_rate_pct": "Diagnosis rate %",
+        "treatment_rate_diagnosed_pct": "Treatment rate %",
+        "vaccine_hepb3_coverage_pct": "HBV vaccine coverage % (HepB3)"
+    }
+    metric_label = metric_labels.get(metric, metric)
     
-    try:
-        age_data = age_data.sort_values("age", key=lambda x: x.map(sort_age_key))
-    except:
-        age_data = age_data.sort_values("age")
+    virus_color = VIRUS_COLORS.get(virus, "#E84057")
+    color_scale = sequential_scale(virus_color)
     
-    # Create figure
-    fig = px.bar(
-        age_data,
-        x="age",
-        y="val",
-        title=f"Age Distribution of {measure} ({virus}, {year}, {sex})"
-    )
-    
-    fig.update_traces(
-        hovertemplate="<b>%{x}</b><br>%{y:,.2f}<extra></extra>"
-    )
+    fig = go.Figure(data=go.Choropleth(
+        locations=df["country"],
+        z=df[col_name],
+        text=df["Country_standard"],
+        locationmode="ISO-3",
+        colorscale=color_scale,
+        autocolorscale=False,
+        reversescale=False,
+        marker_line_color="rgba(255,255,255,0.15)",
+        marker_line_width=0.5,
+        colorbar_title=metric_label,
+        colorbar_ticksuffix="%" if "pct" in metric or "rate" in metric else "",
+        hovertemplate="<b>%{text}</b><br>" + metric_label + ": %{z:,.2f}<extra></extra>"
+    ))
     
     fig.update_layout(
-        height=400,
-        xaxis_title="Age Group",
-        yaxis_title=f"{measure} ({metric_type})",
-        xaxis_tickangle=-45
+        title=dict(
+            text=f"Global {metric_label} ({map_year})",
+            font=dict(size=16, color="#ECEFF2"),
+            x=0.05, y=0.95
+        ),
+        geo=dict(
+            showframe=False,
+            showcoastlines=True,
+            projection_type='natural earth',
+            landcolor='#101E2B',
+            oceancolor='#07111A',
+            showocean=True,
+            showland=True,
+            coastlinecolor="rgba(255,255,255,0.08)",
+            countrycolor="rgba(255,255,255,0.06)",
+        ),
+        margin=dict(l=0, r=0, t=50, b=0),
+        height=450,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
     )
     
     return fig
 
 
 @callback(
-    Output("sex-ratio-chart", "figure"),
+    Output("gho-cascade-chart", "figure"),
     Input("selected-virus", "data"),
-    Input("epi-burden-metric", "value"),
-    Input("sex-ratio-age", "value"),
     Input("continent-dropdown", "value"),
     Input("country-dropdown", "value"),
 )
-def update_sex_ratio_chart(virus, metric, age_group, regions, countries):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    
-    if ihme_df.empty:
-        return _empty_plot("No IHME data available")
-    
-    # Parse metric
-    try:
-        measure, metric_type = metric.split("|")
-    except:
-        measure, metric_type = "Prevalence", "Number"
-    
-    # Filter data
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause = cause_lookup.get((virus or "HBV").upper())
-    
-    # Handle different age group selections
-    if age_group == "All ages":
-        # For "All ages", include all age groups
-        all_data = ihme_df[
-            (ihme_df["cause"] == cause) &
-            (ihme_df["measure"] == measure) &
-            (ihme_df["metric"] == metric_type) &
-            (ihme_df["sex"].isin(["Male", "Female"]))
-        ].copy()
-    else:
-        # For specific age groups, use exact match
-        all_data = ihme_df[
-            (ihme_df["cause"] == cause) &
-            (ihme_df["measure"] == measure) &
-            (ihme_df["metric"] == metric_type) &
-            (ihme_df["age"] == age_group) &
-            (ihme_df["sex"].isin(["Male", "Female"]))
-        ].copy()
+def update_gho_cascade_chart(virus, regions, countries):
+    if virus not in ["HBV", "HCV"]:
+        return _empty_plot("WHO GHO country profile data is only available for Hepatitis B and Hepatitis C.")
         
-        # If no data found, try other metrics as fallback
-        if all_data.empty:
-            # Try with just Number metric (most common)
-            all_data = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == "Number") &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"].isin(["Male", "Female"]))
-            ].copy()
+    data = get_data_store()
+    who_gho_df = data.get("who_gho_df", pd.DataFrame())
+    
+    if who_gho_df.empty:
+        return _empty_plot("No WHO GHO data available")
+        
+    df = who_gho_df[who_gho_df["year"] == 2022]
+    
+    if regions:
+        df = df[df["WHO_Regions"].isin(regions)]
+    if countries:
+        df = df[df["Country_standard"].isin(countries)]
+        
+    if df.empty:
+        return _empty_plot("No data available for current filters")
+        
+    prefix = virus.lower() + "_"
+    
+    livingwith_col = f"{prefix}livingwith_num"
+    diagnosed_col = f"{prefix}diagnosed_num"
+    treatment_col = f"{prefix}treatment_num" if virus == "HBV" else f"{prefix}treatment_cumulative_num"
+    
+    living_with = df[livingwith_col].sum() if livingwith_col in df.columns else 0
+    diagnosed = df[diagnosed_col].sum() if diagnosed_col in df.columns else 0
+    treated = df[treatment_col].sum() if treatment_col in df.columns else 0
+    
+    if pd.isna(living_with) or living_with == 0:
+        return _empty_plot("No cascade numbers available for current filters")
+        
+    stages = ["Living with infection", "Diagnosed", "Treated"]
+    values = [living_with, diagnosed, treated]
+    values = [val if not pd.isna(val) else 0 for val in values]
+    
+    virus_color = VIRUS_COLORS.get(virus, "#E84057")
+    colors = [virus_color, shade(virus_color, -20), shade(virus_color, -40)]
+    
+    fig = go.Figure(go.Funnel(
+        y=stages,
+        x=values,
+        textinfo="value+percent initial",
+        marker={"color": colors, "line": {"width": [1, 1, 1], "color": ["#161D26", "#161D26", "#161D26"]}},
+        connector={"line": {"color": "rgba(255,255,255,0.05)", "width": 1}}
+    ))
+    
+    fig.update_layout(
+        title=dict(
+            text=f"Hepatitis {virus[-1]} Care Cascade (2022)",
+            font=dict(size=14, color="#ECEFF2"),
+            x=0.5, y=0.95,
+            xanchor="center"
+        ),
+        margin=dict(l=40, r=40, t=50, b=20),
+        height=350,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+    
+    return fig
+
+
+
+
+
+@callback(
+    Output("gho-data-table", "children"),
+    Input("selected-virus", "data"),
+    Input("continent-dropdown", "value"),
+    Input("country-dropdown", "value"),
+)
+def update_gho_data_table(virus, regions, countries):
+    if virus not in ["HBV", "HCV"]:
+        return html.P("Select Hepatitis B or C to view WHO GHO detailed country profiles.", className="text-muted text-center py-4")
+        
+    data = get_data_store()
+    who_gho_df = data.get("who_gho_df", pd.DataFrame())
+    
+    if who_gho_df.empty:
+        return html.P("No WHO GHO data available.", className="text-muted text-center py-4")
+        
+    df = who_gho_df[who_gho_df["year"] == 2022].copy()
+    
+    if regions:
+        df = df[df["WHO_Regions"].isin(regions)]
+    if countries:
+        df = df[df["Country_standard"].isin(countries)]
+        
+    if df.empty:
+        return html.P("No data available matching filters.", className="text-muted text-center py-4")
+        
+    prefix = virus.lower() + "_"
+    
+    cols_map = {
+        "Country_standard": "Country",
+        "WHO_Regions": "WHO Region",
+        f"{prefix}livingwith_num": "Living with infection",
+        f"{prefix}new_infections_num": "New infections",
+        f"{prefix}deaths_num": "Deaths",
+        f"{prefix}prevalence_pct": "Prevalence %",
+        f"{prefix}diagnosis_rate_pct": "Diagnosis rate %",
+        f"{prefix}treatment_rate_diagnosed_pct": "Treatment rate %"
+    }
+    
+    if virus == "HBV":
+        cols_map[f"{prefix}vaccine_hepb3_coverage_pct"] = "HBV vaccine coverage % (HepB3)"
+        
+    available_cols = [c for c in cols_map.keys() if c in df.columns]
+    table_df = df[available_cols].copy()
+    
+    for col in table_df.columns:
+        if col in ["Country_standard", "WHO_Regions"]:
+            continue
+        if "num" in col or "livingwith" in col or "infections" in col or "deaths" in col:
+            table_df[col] = table_df[col].apply(lambda x: f"{int(x):,}" if not pd.isna(x) and not np.isinf(x) else "N/A")
+        elif "pct" in col or "rate" in col:
+            table_df[col] = table_df[col].apply(lambda x: f"{x:.1f}%" if not pd.isna(x) and not np.isinf(x) else "N/A")
             
-            # If still no data, try Prevalence if we weren't already using it
-            if all_data.empty and measure != "Prevalence":
-                all_data = ihme_df[
-                    (ihme_df["cause"] == cause) &
-                    (ihme_df["measure"] == "Prevalence") &
-                    (ihme_df["metric"] == "Number") &
-                    (ihme_df["age"] == age_group) &
-                    (ihme_df["sex"].isin(["Male", "Female"]))
-                ].copy()
+    table_df = table_df.rename(columns=cols_map)
     
-    # Apply filters
-    if regions:
-        all_data = all_data[all_data["WHO_Regions"].isin(regions)]
+    from hep_theme import TABLE_HEADER_STYLE, TABLE_CELL_STYLE, TABLE_ODD_ROW_STYLE
     
-    if countries:
-        all_data = all_data[all_data["Country_standard"].isin(countries)]
-    
-    if all_data.empty:
-        return _empty_plot(f"No data available for {age_group} age group")
-    
-    # Separate Male and Female data
-    male_data = all_data[all_data["sex"] == "Male"].copy()
-    female_data = all_data[all_data["sex"] == "Female"].copy()
-    
-    # Aggregate by year
-    male_yearly = male_data.groupby("year")["val"].sum().reset_index()
-    female_yearly = female_data.groupby("year")["val"].sum().reset_index()
-    
-    # Create complete year range
-    all_years = sorted(set(male_yearly["year"]).union(set(female_yearly["year"])))
-    
-    # Create dataframes with all years
-    male_all_years = pd.DataFrame({"year": all_years})
-    female_all_years = pd.DataFrame({"year": all_years})
-    
-    # Merge with actual data
-    male_all_years = male_all_years.merge(male_yearly, on="year", how="left")
-    female_all_years = female_all_years.merge(female_yearly, on="year", how="left")
-    
-    # Fill missing values with interpolation
-    male_all_years["val"] = male_all_years["val"].interpolate(method='linear')
-    female_all_years["val"] = female_all_years["val"].interpolate(method='linear')
-    
-    # For edge years, use forward/backward fill
-    male_all_years["val"] = male_all_years["val"].fillna(method='ffill').fillna(method='bfill')
-    female_all_years["val"] = female_all_years["val"].fillna(method='ffill').fillna(method='bfill')
-    
-    # Merge and calculate ratio
-    ratio_data = pd.merge(male_all_years, female_all_years, on="year", suffixes=("_male", "_female"))
-    
-    # Calculate ratio safely
-    ratio_data["sex_ratio"] = np.where(
-        ratio_data["val_female"] > 0,
-        ratio_data["val_male"] / ratio_data["val_female"],
-        np.nan
-    )
-    
-    ratio_data = ratio_data.dropna(subset=["sex_ratio"])
-    
-    if ratio_data.empty:
-        return _empty_plot("No valid ratio data")
-    
-    # Create figure
-    fig = px.line(
-        ratio_data,
-        x="year",
-        y="sex_ratio",
-        markers=True,
-        title=f"Male-to-Female Ratio of {measure} ({virus}, {age_group})"
-    )
-    
-    fig.add_hline(
-        y=1.0,
-        line_dash="dash",
-        line_color="gray",
-        annotation_text="Equal (1:1)",
-        annotation_position="bottom right"
-    )
-    
-    fig.update_traces(
-        line=dict(width=3),
-        hovertemplate="Year: %{x}<br>Male:Female Ratio: %{y:.2f}<extra></extra>"
-    )
-    
-    # Add note about interpolation if needed
-    missing_male = len(male_yearly) < len(all_years)
-    missing_female = len(female_yearly) < len(all_years)
-    
-    if missing_male or missing_female:
-        fig.add_annotation(
-            text="Note: Some years interpolated (alternating Male/Female data)",
-            xref="paper", yref="paper",
-            x=0.02, y=0.02,
-            showarrow=False,
-            font=dict(size=10, color="gray"),
-            bgcolor="rgba(255,255,255,0.8)"
-        )
-    
-    fig.update_layout(
-        height=400,
-        xaxis_title="Year",
-        yaxis_title="Male-to-Female Ratio",
-        hovermode="x unified"
-    )
-    
-    return fig
-
-@callback(
-    Output("region-age-pattern", "options"),
-    Input("selected-virus", "data"),
-)
-def update_region_age_pattern_options(virus):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    
-    if ihme_df.empty:
-        return []
-    
-    # Get unique regions
-    regions = sorted(ihme_df["WHO_Regions"].dropna().unique())
-    options = [{"label": region, "value": region} for region in regions]
-    
-    return options
-
-
-@callback(
-    Output("region-age-pattern-chart", "figure"),
-    Input("selected-virus", "data"),
-    Input("epi-burden-metric", "value"),
-    Input("region-age-pattern", "value"),
-    Input("epi-sex-filter", "value"),
-)
-def update_region_age_pattern_chart(virus, metric, region, sex):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    
-    if ihme_df.empty or not region:
-        return _empty_plot("Select a region")
-    
-    # Parse metric
-    try:
-        measure, metric_type = metric.split("|")
-    except:
-        measure, metric_type = "Prevalence", "Number"
-    
-    # Filter data
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause = cause_lookup.get((virus or "HBV").upper())
-    
-    # Handle "Both" sexes by summing Male and Female
-    if sex == "Both":
-        # Get Male data
-        filtered_male = ihme_df[
-            (ihme_df["cause"] == cause) &
-            (ihme_df["measure"] == measure) &
-            (ihme_df["metric"] == metric_type) &
-            (ihme_df["WHO_Regions"] == region) &
-            (ihme_df["sex"] == "Male")
-        ].copy()
-        
-        # Get Female data
-        filtered_female = ihme_df[
-            (ihme_df["cause"] == cause) &
-            (ihme_df["measure"] == measure) &
-            (ihme_df["metric"] == metric_type) &
-            (ihme_df["WHO_Regions"] == region) &
-            (ihme_df["sex"] == "Female")
-        ].copy()
-        
-        # Combine Male and Female data
-        filtered = pd.concat([filtered_male, filtered_female])
-    else:
-        filtered = ihme_df[
-            (ihme_df["cause"] == cause) &
-            (ihme_df["measure"] == measure) &
-            (ihme_df["metric"] == metric_type) &
-            (ihme_df["WHO_Regions"] == region) &
-            (ihme_df["sex"] == sex)
-        ].copy()
-    
-    # Exclude "All ages"
-    filtered = filtered[filtered["age"] != "All ages"]
-    
-    if filtered.empty:
-        return _empty_plot(f"No age-specific data for {region}")
-    
-    # Get latest year
-    latest_year = filtered["year"].max()
-    latest_data = filtered[filtered["year"] == latest_year]
-    
-    if latest_data.empty:
-        return _empty_plot(f"No data for {latest_year}")
-    
-    # Aggregate by age
-    age_data = latest_data.groupby("age")["val"].mean().reset_index()
-    age_data = age_data.sort_values("age")
-    
-    # Create figure
-    fig = px.bar(
-        age_data,
-        x="age",
-        y="val",
-        title=f"Age Pattern in {region} ({virus}, {latest_year}, {sex})"
-    )
-    
-    fig.update_traces(
-        hovertemplate="<b>%{x}</b><br>%{y:,.2f}<extra></extra>"
-    )
-    
-    fig.update_layout(
-        height=400,
-        xaxis_title="Age Group",
-        yaxis_title=f"{measure} ({metric_type})",
-        xaxis_tickangle=-45
-    )
-    
-    return fig
-
-
-@callback(
-    Output("region-comparison-chart", "figure"),
-    Input("selected-virus", "data"),
-    Input("epi-burden-metric", "value"),
-    Input("epi-age-group", "value"),
-    Input("epi-sex-filter", "value"),
-    Input("region-compare-type", "value"),
-)
-def update_region_comparison(virus, metric, age_group, sex, compare_by):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    
-    if ihme_df.empty:
-        return _empty_plot("No IHME data available")
-    
-    # Parse metric
-    try:
-        measure, metric_type = metric.split("|")
-    except:
-        measure, metric_type = "Prevalence", "Number"
-    
-    # Filter data
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause = cause_lookup.get((virus or "HBV").upper())
-    
-    # Handle "Both" sexes by summing Male and Female
-    if sex == "Both":
-        # Get Male data
-        if age_group == "All ages":
-            filtered_male = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == "Male")
-            ].copy()
-        else:
-            filtered_male = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == "Male")
-            ].copy()
-        
-        # Get Female data
-        if age_group == "All ages":
-            filtered_female = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == "Female")
-            ].copy()
-        else:
-            filtered_female = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == "Female")
-            ].copy()
-        
-        # Combine Male and Female data
-        filtered = pd.concat([filtered_male, filtered_female])
-    else:
-        # Use the sex as-is
-        if age_group == "All ages":
-            filtered = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == sex)
-            ].copy()
-        else:
-            filtered = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == sex)
-            ].copy()
-    
-    if filtered.empty:
-        return _empty_plot("No data for selected filters")
-    
-    # Get latest year
-    latest_year = filtered["year"].max()
-    latest_data = filtered[filtered["year"] == latest_year]
-    
-    # Simple aggregation by region
-    region_data = latest_data.groupby("WHO_Regions")["val"].sum().reset_index()
-    region_data = region_data.sort_values("val", ascending=False)
-    
-    # Create bar chart
-    fig = px.bar(
-        region_data,
-        x="WHO_Regions",
-        y="val",
-        color="WHO_Regions",
-        title=f"{measure} by WHO Region ({latest_year})"
-    )
-    
-    fig.update_traces(
-        hovertemplate="<b>%{x}</b><br>Value: %{y:,.0f}<extra></extra>"
-    )
-    
-    fig.update_layout(
-        height=400,
-        xaxis_title="WHO Region",
-        yaxis_title=f"{measure} ({metric_type})",
-        showlegend=False,
-        xaxis_tickangle=-45
-    )
-    
-    return fig
-
-
-@callback(
-    Output("burden-coverage-scatter", "figure"),
-    Input("selected-virus", "data"),
-    Input("correlation-metric", "value"),
-    Input("correlation-age", "value"),
-    Input("correlation-sex", "value"),
-    Input("continent-dropdown", "value"),
-)
-def update_burden_coverage_scatter(virus, metric, age_group, sex, regions):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    seq_data = data["hbv_data"] if (virus or "HBV") == "HBV" else data["hcv_data"]
-    population_df = data["population_df"]
-    
-    if ihme_df.empty or seq_data.empty:
-        return _empty_plot("Insufficient data for correlation analysis")
-    
-    # Parse x metric
-    try:
-        measure, metric_type = metric.split("|")
-    except:
-        measure, metric_type = "Prevalence", "Number"
-    
-    # Get burden data
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause = cause_lookup.get((virus or "HBV").upper())
-    
-    # Handle "Both" sexes by summing Male and Female
-    if sex == "Both":
-        # Get Male data
-        if age_group == "All ages":
-            male_data = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == "Male")
-            ].copy()
-        else:
-            male_data = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == "Male")
-            ].copy()
-        
-        # Get Female data
-        if age_group == "All ages":
-            female_data = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == "Female")
-            ].copy()
-        else:
-            female_data = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == "Female")
-            ].copy()
-        
-        # Combine Male and Female data
-        burden_data = pd.concat([male_data, female_data])
-    else:
-        # Use the sex as-is
-        if age_group == "All ages":
-            burden_data = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == sex)
-            ].copy()
-        else:
-            burden_data = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == sex)
-            ].copy()
-    
-    if burden_data.empty:
-        return _empty_plot(f"No burden data for {virus} ({age_group}, {sex})")
-    
-    # Get latest year
-    latest_year = burden_data["year"].max()
-    burden_latest = burden_data[burden_data["year"] == latest_year]
-    
-    if burden_latest.empty:
-        return _empty_plot(f"No burden data for year {latest_year}")
-    
-    # Aggregate burden by country
-    country_burden = burden_latest.groupby("Country_standard")["val"].sum().reset_index()
-    
-    # Get sequence counts by country
-    country_sequences = seq_data.groupby("Country_standard").size().reset_index(name="sequence_count")
-    
-    # Merge data
-    merged = pd.merge(country_burden, country_sequences, on="Country_standard", how="inner")
-    
-    # Apply region filter
-    if regions:
-        merged = merged[merged["Country_standard"].isin(
-            ihme_df[ihme_df["WHO_Regions"].isin(regions)]["Country_standard"].unique()
-        )]
-    
-    if merged.empty:
-        return _empty_plot("No overlapping data between burden and sequences")
-    
-    # Add population data for per-capita calculations (optional)
-    if not population_df.empty:
-        pop_latest = population_df[population_df["Year"] == latest_year]
-        if not pop_latest.empty:
-            merged = merged.merge(pop_latest[["Country_standard", "Population"]], 
-                                on="Country_standard", how="left")
-            merged["sequences_per_million"] = (merged["sequence_count"] / merged["Population"]) * 1_000_000
-            # You could use sequences_per_million instead of sequence_count for y-axis
-    
-    # Create scatter plot
-    fig = px.scatter(
-        merged,
-        x="val",
-        y="sequence_count",
-        size="sequence_count",
-        hover_name="Country_standard",
-        log_x=True,
-        log_y=True,
-        title=f"Burden vs. Sequences Correlation ({virus}, {latest_year}, {age_group}, {sex})",
-        hover_data={"Country_standard": True, "val": ":,.0f", "sequence_count": True}
-    )
-    
-    # Add trend line
-    if len(merged) > 1:
-        # Calculate linear regression for trend line
-        x = np.log(merged["val"] + 1)  # Add 1 to avoid log(0)
-        y = np.log(merged["sequence_count"] + 1)
-        
-        # Fit line
-        coefficients = np.polyfit(x, y, 1)
-        polynomial = np.poly1d(coefficients)
-        
-        # Generate points for trend line
-        x_line = np.linspace(x.min(), x.max(), 100)
-        y_line = polynomial(x_line)
-        
-        # Add trend line to plot
-        fig.add_trace(go.Scatter(
-            x=np.exp(x_line),
-            y=np.exp(y_line),
-            mode='lines',
-            name='Trend Line',
-            line=dict(color='red', dash='dash'),
-            hovertemplate='Trend Line<extra></extra>'
-        ))
-    
-    fig.update_layout(
-        height=400,
-        xaxis_title=f"{measure} ({metric_type})",
-        yaxis_title="Number of Sequences",
-        hovermode="closest",
-        showlegend=True
-    )
-    
-    return fig
-
-
-@callback(
-    Output("epidemiology-data-table", "children"),
-    Input("selected-virus", "data"),
-    Input("epi-burden-metric", "value"),
-    Input("epi-age-group", "value"),
-    Input("epi-sex-filter", "value"),
-    Input("continent-dropdown", "value"),
-    Input("country-dropdown", "value"),
-)
-def update_epidemiology_table(virus, metric, age_group, sex, regions, countries):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    
-    if ihme_df.empty:
-        return html.P("No epidemiology data available", className="text-muted")
-    
-    # Parse metric
-    try:
-        measure, metric_type = metric.split("|")
-    except:
-        measure, metric_type = "Prevalence", "Number"
-    
-    # Filter data
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause = cause_lookup.get((virus or "HBV").upper())
-    
-    # Handle "Both" sexes by summing Male and Female
-    if sex == "Both":
-        # Get Male data
-        if age_group == "All ages":
-            filtered_male = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == "Male")
-            ].copy()
-        else:
-            filtered_male = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == "Male")
-            ].copy()
-        
-        # Get Female data
-        if age_group == "All ages":
-            filtered_female = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == "Female")
-            ].copy()
-        else:
-            filtered_female = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == "Female")
-            ].copy()
-        
-        # Combine Male and Female data
-        filtered = pd.concat([filtered_male, filtered_female])
-    else:
-        # Use the sex as-is
-        if age_group == "All ages":
-            filtered = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["sex"] == sex)
-            ].copy()
-        else:
-            filtered = ihme_df[
-                (ihme_df["cause"] == cause) &
-                (ihme_df["measure"] == measure) &
-                (ihme_df["metric"] == metric_type) &
-                (ihme_df["age"] == age_group) &
-                (ihme_df["sex"] == sex)
-            ].copy()
-    
-    # Apply filters
-    if regions:
-        filtered = filtered[filtered["WHO_Regions"].isin(regions)]
-    if countries:
-        filtered = filtered[filtered["Country_standard"].isin(countries)]
-    
-    if filtered.empty:
-        return html.P("No data for selected filters", className="text-muted")
-    
-    # Select and rename columns
-    display_cols = ["Country_standard", "WHO_Regions", "year", "sex", "age", "val"]
-    display_cols = [col for col in display_cols if col in filtered.columns]
-    
-    display_df = filtered[display_cols].copy()
-    display_df = display_df.sort_values(["year", "Country_standard"])
-    
-    # Create DataTable
     table = dash.dash_table.DataTable(
-        data=display_df.to_dict('records'),
-        columns=[{"name": col.replace("_", " ").title(), "id": col} for col in display_cols],
+        data=table_df.to_dict('records'),
+        columns=[{"name": col, "id": col} for col in table_df.columns],
         page_size=10,
         style_table={'overflowX': 'auto'},
-        style_cell={
-            'textAlign': 'left',
-            'padding': '8px',
-            'overflow': 'hidden',
-            'textOverflow': 'ellipsis',
-        },
-        style_header={
-            'backgroundColor': 'rgb(230, 230, 230)',
-            'fontWeight': 'bold'
-        },
+        style_cell=TABLE_CELL_STYLE,
+        style_header=TABLE_HEADER_STYLE,
+        style_data_conditional=[TABLE_ODD_ROW_STYLE],
         filter_action="native",
         sort_action="native",
-        export_format="csv"
     )
     
     return table
 
 
-@callback(
-    Output("epi-age-group", "options"),
-    Output("epi-age-group", "value"),
-    Output("sex-ratio-age", "options"),
-    Output("sex-ratio-age", "value"),
-    Input("selected-virus", "data"),
-    Input("epi-burden-metric", "value"),
-)
-def update_age_group_options(virus, metric):
-    data = get_data_store()
-    ihme_df = data["ihme_df"]
-    
-    if ihme_df.empty:
-        options = [{"label": "All ages", "value": "All ages"}]
-        return options, "All ages", options, "All ages"
-    
-    # Parse metric
-    try:
-        measure, metric_type = metric.split("|")
-    except:
-        measure, metric_type = "Prevalence", "Number"
-    
-    cause_lookup = {
-        "HBV": "Total burden related to hepatitis B",
-        "HCV": "Total burden related to hepatitis C",
-        "HEV": "Total burden related to hepatitis E",
-    }
-    cause = cause_lookup.get((virus or "HBV").upper())
-    
-    # First try with the selected metric
-    filtered = ihme_df[
-        (ihme_df["cause"] == cause) &
-        (ihme_df["measure"] == measure) &
-        (ihme_df["metric"] == metric_type)
-    ]
-    
-    # If no data with that metric, try with just the measure and any metric
-    if filtered.empty:
-        filtered = ihme_df[
-            (ihme_df["cause"] == cause) &
-            (ihme_df["measure"] == measure)
-        ]
-    
-    # If still no data, try with any measure for this cause
-    if filtered.empty:
-        filtered = ihme_df[ihme_df["cause"] == cause]
-    
-    # Get unique age groups
-    age_groups = sorted(filtered["age"].dropna().unique())
-    
-    # Try to sort age groups logically
-    def sort_age_key(age):
-        if not isinstance(age, str):
-            return float('inf')
-        
-        age_lower = age.lower()
-        
-        # Handle months first
-        if 'month' in age_lower:
-            nums = re.findall(r'\d+', age)
-            if nums:
-                return int(nums[0]) - 1000
-        
-        # Handle years
-        elif 'year' in age_lower:
-            if '<' in age:
-                nums = re.findall(r'\d+', age)
-                if nums:
-                    return int(nums[0]) - 500
-            elif '-' in age:
-                nums = re.findall(r'\d+', age)
-                if nums:
-                    return int(nums[0])
-        
-        return float('inf')
-    
-    try:
-        age_groups.sort(key=sort_age_key)
-    except:
-        age_groups.sort()
-    
-    # Create options - include "All ages" first
-    options = [{"label": "All ages (sum of all age groups)", "value": "All ages"}]
-    
-    # Add actual age groups
-    for age in age_groups:
-        if age != "All ages":  # Don't add if it's already there
-            options.append({"label": age, "value": age})
-    
-    # Default value
-    default_value = "All ages"
-    
-    return options, default_value, options, default_value
-
-# Priority Download Callback
 @callback(
     Output("priority-download", "data"),
     Input("priority-download-btn", "n_clicks"),
@@ -7211,10 +6318,10 @@ def download_priority_table(n_clicks, priority_json, virus):
     return dcc.send_data_frame(priority_df.to_csv, filename, index=False)
     
 @callback(
-    Output("year-start-dropdown", "options"),
-    Output("year-start-dropdown", "value"),
-    Output("year-end-dropdown", "options"),
-    Output("year-end-dropdown", "value"),
+    Output("year-range-slider", "min"),
+    Output("year-range-slider", "max"),
+    Output("year-range-slider", "value"),
+    Output("year-range-slider", "marks"),
     Output('continent-dropdown', 'options'),
     Output('country-dropdown', 'options'),
     Output('genotype-dropdown', 'options'),
@@ -7223,7 +6330,6 @@ def download_priority_table(n_clicks, priority_json, virus):
 def init_controls(virus):
     data = get_data_store()
     
-    # FIXED: Properly handle all three viruses
     if virus == "HBV":
         base = data['hbv_data']
     elif virus == "HCV":
@@ -7234,15 +6340,35 @@ def init_controls(virus):
         base = data['hbv_data']
     
     if base.empty:
-        return [], None, [], None, [], [], []
+        return 1963, 2024, [1963, 2024], {}, [], [], []
     
     y0, y1 = int(base["Year"].min()), int(base["Year"].max())
-    opts = [{"label": str(y), "value": y} for y in range(y0, y1 + 1)]
+    
+    # Generate year marks dynamically
+    marks = {y0: str(y0), y1: str(y1)}
+    start_decade = ((y0 // 10) + 1) * 10
+    for y in range(start_decade, y1, 10):
+        if y - y0 >= 3 and y1 - y >= 3:
+            marks[y] = str(y)
+            
+    # sort keys
+    marks = {k: marks[k] for k in sorted(marks.keys())}
     
     cont_opts = [{"label": r, "value": r} for r in sorted(base["WHO_Regions"].dropna().unique()) if r!="Unknown"]
     country_opts = [{"label": c, "value": c} for c in sorted(base["Country_standard"].dropna().unique()) if c!="Unknown"]
     geno_opts = [{"label": g, "value": g} for g in sorted(base["genotype"].dropna().unique())]
-    return opts, y0, opts, y1, cont_opts, country_opts, geno_opts
+    return y0, y1, [y0, y1], marks, cont_opts, country_opts, geno_opts
+
+
+@callback(
+    Output("year-range-label", "children"),
+    Input("year-range-slider", "value")
+)
+def update_year_range_label(year_range):
+    if not year_range or len(year_range) != 2:
+        return ""
+    return f"{year_range[0]} – {year_range[1]}"
+
 
 @callback(
     Output("epi-prevalence-total", "children"),
@@ -7375,14 +6501,7 @@ def update_epidemiology_summary(virus, regions, countries, filtered_json, gap_js
         who_progress_display,      # epi-2030-progress
     ]
 
-@callback(
-    Output("btn-go-to-epidemiology", "n_clicks"),  # Add this output
-    Input("btn-go-to-epidemiology", "n_clicks"),
-    prevent_initial_call=True
-)
-def go_to_epidemiology_tab(n_clicks):
-    # This triggers the tab switch via the existing tab navigation callback
-    return n_clicks
+
 
 # === ACTIONS AND DOWNLOADS ==============================================================
 # - Main data download with Taxa -
@@ -7439,14 +6558,13 @@ def _build_keys(df: pd.DataFrame, is_main: bool) -> pd.DataFrame:
     Input("btn-download-data", "n_clicks"),
     State("filtered-store", "data"),
     State("selected-virus", "data"),
-    State("year-start-dropdown", "value"),
-    State("year-end-dropdown", "value"),
+    State("year-range-slider", "value"),
     State("continent-dropdown", "value"),
     State("country-dropdown", "value"),
     State("genotype-dropdown", "value"),
     prevent_initial_call=True,
 )
-def download_main_data_with_taxa(n_clicks, filtered_json, virus, start_year, end_year, regions, countries, genotypes):
+def download_main_data_with_taxa(n_clicks, filtered_json, virus, year_range, regions, countries, genotypes):
     # Only act on actual clicks
     if not n_clicks:
         raise PreventUpdate
