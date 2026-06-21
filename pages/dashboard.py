@@ -3703,13 +3703,36 @@ def create_dashboard_layout():
                 ], xs=12, lg=6)
             ], className="mb-4"),
 
+            # Section: Program Response vs Burden
+            dbc.Row([
+                dbc.Col([
+                    html.H4("Program Response vs Burden", className="text-white mt-4 mb-3 fw-bold")
+                ], width=12)
+            ]),
+
             # Row 3: HBV Indicators & Priority Table
             dbc.Row([
                 # HBV Left Plot
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5("HBV Intervention & Infection Trends", className="mb-3"),
+                            html.H5("HBV Vaccine Coverage vs Disease Burden", className="mb-3"),
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Label("Y-Axis Burden Metric:", className="small fw-bold text-muted mb-1"),
+                                    dcc.Dropdown(
+                                        id="hbv-y-metric",
+                                        options=[
+                                            {"label": "Prevalence %", "value": "hbv_prevalence_pct"},
+                                            {"label": "New Infections", "value": "hbv_new_infections_num"},
+                                            {"label": "Living with HBV", "value": "hbv_livingwith_num"}
+                                        ],
+                                        value="hbv_prevalence_pct",
+                                        clearable=False,
+                                        className="hep-dropdown mb-3"
+                                    )
+                                ], width=12)
+                            ]),
                             dcc.Loading(
                                 dcc.Graph(id="hbv-epi-trend-plot"),
                                 type="circle"
@@ -3738,7 +3761,36 @@ def create_dashboard_layout():
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5("HCV Intervention & Infection Trends", className="mb-3"),
+                            html.H5("HCV Diagnosis/Treatment Access vs Disease Burden", className="mb-3"),
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Label("X-Axis Access Metric:", className="small fw-bold text-muted mb-1"),
+                                    dcc.Dropdown(
+                                        id="hcv-x-metric",
+                                        options=[
+                                            {"label": "Diagnosis Rate %", "value": "hcv_diagnosis_rate_pct"},
+                                            {"label": "Treatment Rate %", "value": "hcv_treatment_rate_diagnosed_pct"}
+                                        ],
+                                        value="hcv_diagnosis_rate_pct",
+                                        clearable=False,
+                                        className="hep-dropdown mb-3"
+                                    )
+                                ], xs=12, md=6),
+                                dbc.Col([
+                                    html.Label("Y-Axis Burden Metric:", className="small fw-bold text-muted mb-1"),
+                                    dcc.Dropdown(
+                                        id="hcv-y-metric",
+                                        options=[
+                                            {"label": "Prevalence %", "value": "hcv_prevalence_pct"},
+                                            {"label": "New Infections", "value": "hcv_new_infections_num"},
+                                            {"label": "Living with HCV", "value": "hcv_livingwith_num"}
+                                        ],
+                                        value="hcv_prevalence_pct",
+                                        clearable=False,
+                                        className="hep-dropdown mb-3"
+                                    )
+                                ], xs=12, md=6)
+                            ]),
                             dcc.Loading(
                                 dcc.Graph(id="hcv-epi-trend-plot"),
                                 type="circle"
@@ -6431,135 +6483,103 @@ def make_epi_priority_table(virus, regions, countries):
     )
 
 
-def make_hbv_epi_trend_plot(regions, countries):
+def make_hbv_epi_scatter_plot(regions, countries, y_metric):
     data = get_data_store()
     who_gho_df = data.get("who_gho_df", pd.DataFrame())
-    ihme_df = data.get("ihme_df", pd.DataFrame())
     
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig = go.Figure()
     
-    # 1. Vaccine coverage
     if not who_gho_df.empty:
-        df_vac = who_gho_df[who_gho_df["hbv_vaccine_hepb3_coverage_pct"].notna() & (who_gho_df["year"] >= 2000)].copy()
-        if regions:
-            df_vac = df_vac[df_vac["WHO_Regions"].isin(regions)]
-        if countries:
-            df_vac = df_vac[df_vac["Country_standard"].isin(countries)]
-            
-        if not df_vac.empty:
-            yearly_vac = df_vac.groupby("year")["hbv_vaccine_hepb3_coverage_pct"].mean().reset_index()
-            fig.add_trace(
-                go.Scatter(
-                    x=yearly_vac["year"],
-                    y=yearly_vac["hbv_vaccine_hepb3_coverage_pct"],
-                    name="HBV Vaccine Coverage %",
-                    line=dict(color="#2EC4B6", width=3),
-                    mode="lines+markers",
-                    hovertemplate="Vaccine Coverage %{x}: %{y:.1f}%<extra></extra>"
-                ),
-                secondary_y=False
-            )
-            
-    # 2. Diagnosis and Treatment rates (2022 only)
-    if not who_gho_df.empty:
-        df_rates = who_gho_df[who_gho_df["year"] == 2022].copy()
-        if regions:
-            df_rates = df_rates[df_rates["WHO_Regions"].isin(regions)]
-        if countries:
-            df_rates = df_rates[df_rates["Country_standard"].isin(countries)]
-            
-        if not df_rates.empty:
-            diag_val = df_rates["hbv_diagnosis_rate_pct"].mean()
-            treat_val = df_rates["hbv_treatment_rate_diagnosed_pct"].mean()
-            
-            if pd.notna(diag_val):
-                fig.add_trace(
-                    go.Scatter(
-                        x=[2022],
-                        y=[diag_val],
-                        name="HBV Diagnosis Rate % (2022)",
-                        marker=dict(color="#FFD166", size=10, symbol="diamond"),
-                        mode="markers",
-                        hovertemplate="Diagnosis Rate: %{y:.1f}%<extra></extra>"
-                    ),
-                    secondary_y=False
-                )
-            if pd.notna(treat_val):
-                fig.add_trace(
-                    go.Scatter(
-                        x=[2022],
-                        y=[treat_val],
-                        name="HBV Treatment Rate % (2022)",
-                        marker=dict(color="#FF9F1C", size=10, symbol="square"),
-                        mode="markers",
-                        hovertemplate="Treatment Rate: %{y:.1f}%<extra></extra>"
-                    ),
-                    secondary_y=False
-                )
-                
-    # 3. New infections (GBD Incidence Number)
-    if not ihme_df.empty:
-        cause = "Total burden related to hepatitis B"
-        base_inf = ihme_df[
-            (ihme_df["cause"] == cause)
-            & (ihme_df["measure"] == "Incidence")
-            & (ihme_df["metric"] == "Number")
-            & (ihme_df["sex"].isin(["Male", "Female"]))
-        ].copy()
+        df_2022 = who_gho_df[who_gho_df["year"] == 2022].copy()
         
         if regions:
-            base_inf = base_inf[base_inf["WHO_Regions"].isin(regions)]
+            df_2022 = df_2022[df_2022["WHO_Regions"].isin(regions)]
         if countries:
-            base_inf = base_inf[base_inf["Country_standard"].isin(countries)]
+            df_2022 = df_2022[df_2022["Country_standard"].isin(countries)]
             
-        if not base_inf.empty:
-            yearly_inf = base_inf.groupby("year")["val"].sum().reset_index()
-            yearly_inf = yearly_inf[(yearly_inf["year"] >= 2000) & (yearly_inf["year"] <= 2021)]
-            if not yearly_inf.empty:
-                fig.add_trace(
-                    go.Scatter(
-                        x=yearly_inf["year"],
-                        y=yearly_inf["val"],
-                        name="HBV New Infections (GBD)",
-                        line=dict(color="#E84057", width=3, dash="dash"),
-                        mode="lines+markers",
-                        hovertemplate="New Infections %{x}: %{y:,.0f}<extra></extra>"
+        x_col = "hbv_vaccine_hepb3_coverage_pct"
+        y_col = y_metric
+        
+        df_plot = df_2022.dropna(subset=[x_col, y_col]).copy()
+        
+        if not df_plot.empty:
+            y_label_map = {
+                "hbv_prevalence_pct": "Prevalence %",
+                "hbv_new_infections_num": "New Infections",
+                "hbv_livingwith_num": "Living with HBV"
+            }
+            y_label = y_label_map.get(y_metric, "Disease Burden")
+            
+            fig.add_trace(
+                go.Scatter(
+                    x=df_plot[x_col],
+                    y=df_plot[y_col],
+                    mode="markers",
+                    text=df_plot["Country_standard"],
+                    marker=dict(
+                        color="#2EC4B6", 
+                        size=10,
+                        line=dict(width=1, color="white"),
+                        opacity=0.8
                     ),
-                    secondary_y=True
+                    name="Countries",
+                    hovertemplate="<b>%{text}</b><br>HepB3 Vaccine Coverage: %{x:.1f}%<br>" + y_label + ": %{y:,.2f}<extra></extra>"
                 )
-                
-    # Style layout
+            )
+            
+            if len(df_plot) > 1:
+                import numpy as np
+                try:
+                    x = df_plot[x_col].values
+                    y = df_plot[y_col].values
+                    idx = np.isfinite(x) & np.isfinite(y)
+                    if np.sum(idx) > 1:
+                        coef = np.polyfit(x[idx], y[idx], 1)
+                        poly1d_fn = np.poly1d(coef)
+                        x_range = np.linspace(x.min(), x.max(), 100)
+                        y_fit = poly1d_fn(x_range)
+                        fig.add_trace(
+                            go.Scatter(
+                                x=x_range,
+                                y=y_fit,
+                                mode="lines",
+                                name="Trend Line",
+                                line=dict(color="#FF9F1C", width=2, dash="dash"),
+                                hoverinfo="skip"
+                            )
+                        )
+                except Exception as e:
+                    pass
+                    
+            fig.update_layout(
+                xaxis_title="HepB3 Vaccine Coverage (%)",
+                yaxis_title=y_label,
+            )
+            
     fig.update_layout(
         title=dict(
-            text="HBV Key Burden Indicators & Interventions over Time",
+            text="HBV Vaccine Coverage vs Disease Burden (2022)",
             font=dict(color="white", size=14)
         ),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="rgba(255,255,255,0.7)"),
         xaxis=dict(
-            title="Year",
             gridcolor="rgba(255,255,255,0.08)",
             linecolor="rgba(255,255,255,0.25)",
             showgrid=True,
             zeroline=False,
         ),
         yaxis=dict(
-            title="Percentage (%)",
             gridcolor="rgba(255,255,255,0.08)",
             linecolor="rgba(255,255,255,0.25)",
             showgrid=True,
-            zeroline=False,
-            range=[0, 105]
-        ),
-        yaxis2=dict(
-            title="New Infections (Annual Cases)",
-            showgrid=False,
             zeroline=False,
         ),
         height=380,
         margin=dict(l=40, r=40, t=40, b=40),
         hovermode="closest",
+        showlegend=True,
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -6571,136 +6591,108 @@ def make_hbv_epi_trend_plot(regions, countries):
     return fig
 
 
-def make_hcv_epi_trend_plot(regions, countries):
+def make_hcv_epi_scatter_plot(regions, countries, x_metric, y_metric):
     data = get_data_store()
     who_gho_df = data.get("who_gho_df", pd.DataFrame())
-    ihme_df = data.get("ihme_df", pd.DataFrame())
     
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig = go.Figure()
     
-    # 1. Diagnosis and Treatment rates (2022 only)
     if not who_gho_df.empty:
-        df_rates = who_gho_df[who_gho_df["year"] == 2022].copy()
-        if regions:
-            df_rates = df_rates[df_rates["WHO_Regions"].isin(regions)]
-        if countries:
-            df_rates = df_rates[df_rates["Country_standard"].isin(countries)]
-            
-        if not df_rates.empty:
-            diag_val = df_rates["hcv_diagnosis_rate_pct"].mean()
-            treat_val = df_rates["hcv_treatment_rate_diagnosed_pct"].mean()
-            
-            if pd.notna(diag_val):
-                fig.add_trace(
-                    go.Scatter(
-                        x=[2022],
-                        y=[diag_val],
-                        name="HCV Diagnosis Rate % (2022)",
-                        marker=dict(color="#FFD166", size=10, symbol="diamond"),
-                        mode="markers",
-                        hovertemplate="Diagnosis Rate: %{y:.1f}%<extra></extra>"
-                    ),
-                    secondary_y=False
-                )
-            if pd.notna(treat_val):
-                fig.add_trace(
-                    go.Scatter(
-                        x=[2022],
-                        y=[treat_val],
-                        name="HCV Treatment Rate % (2022)",
-                        marker=dict(color="#FF9F1C", size=10, symbol="square"),
-                        mode="markers",
-                        hovertemplate="Treatment Rate: %{y:.1f}%<extra></extra>"
-                    ),
-                    secondary_y=False
-                )
-                
-    # 2. Cumulative Treatment (2022 only)
-    if not who_gho_df.empty:
-        df_treat = who_gho_df[who_gho_df["year"] == 2022].copy()
-        if regions:
-            df_treat = df_treat[df_treat["WHO_Regions"].isin(regions)]
-        if countries:
-            df_treat = df_treat[df_treat["Country_standard"].isin(countries)]
-            
-        if not df_treat.empty:
-            treat_cum = df_treat["hcv_treatment_cumulative_num"].sum()
-            if pd.notna(treat_cum) and treat_cum > 0:
-                fig.add_trace(
-                    go.Scatter(
-                        x=[2022],
-                        y=[treat_cum],
-                        name="HCV Treatment by Year (2022)",
-                        marker=dict(color="#4FAEFF", size=10, symbol="circle"),
-                        mode="markers",
-                        hovertemplate="Treatment by Year: %{y:,.0f}<extra></extra>"
-                    ),
-                    secondary_y=True
-                )
-                
-    # 3. New infections (GBD Incidence Number)
-    if not ihme_df.empty:
-        cause = "Total burden related to hepatitis C"
-        base_inf = ihme_df[
-            (ihme_df["cause"] == cause)
-            & (ihme_df["measure"] == "Incidence")
-            & (ihme_df["metric"] == "Number")
-            & (ihme_df["sex"].isin(["Male", "Female"]))
-        ].copy()
+        df_2022 = who_gho_df[who_gho_df["year"] == 2022].copy()
         
         if regions:
-            base_inf = base_inf[base_inf["WHO_Regions"].isin(regions)]
+            df_2022 = df_2022[df_2022["WHO_Regions"].isin(regions)]
         if countries:
-            base_inf = base_inf[base_inf["Country_standard"].isin(countries)]
+            df_2022 = df_2022[df_2022["Country_standard"].isin(countries)]
             
-        if not base_inf.empty:
-            yearly_inf = base_inf.groupby("year")["val"].sum().reset_index()
-            yearly_inf = yearly_inf[(yearly_inf["year"] >= 2000) & (yearly_inf["year"] <= 2021)]
-            if not yearly_inf.empty:
-                fig.add_trace(
-                    go.Scatter(
-                        x=yearly_inf["year"],
-                        y=yearly_inf["val"],
-                        name="HCV New Infections (GBD)",
-                        line=dict(color="#E84057", width=3, dash="dash"),
-                        mode="lines+markers",
-                        hovertemplate="New Infections %{x}: %{y:,.0f}<extra></extra>"
+        x_col = x_metric
+        y_col = y_metric
+        
+        df_plot = df_2022.dropna(subset=[x_col, y_col]).copy()
+        
+        if not df_plot.empty:
+            x_label_map = {
+                "hcv_diagnosis_rate_pct": "Diagnosis Rate %",
+                "hcv_treatment_rate_diagnosed_pct": "Treatment Rate %"
+            }
+            y_label_map = {
+                "hcv_prevalence_pct": "Prevalence %",
+                "hcv_new_infections_num": "New Infections",
+                "hcv_livingwith_num": "Living with HCV"
+            }
+            x_label = x_label_map.get(x_metric, "Program Response")
+            y_label = y_label_map.get(y_metric, "Disease Burden")
+            
+            fig.add_trace(
+                go.Scatter(
+                    x=df_plot[x_col],
+                    y=df_plot[y_col],
+                    mode="markers",
+                    text=df_plot["Country_standard"],
+                    marker=dict(
+                        color="#4FAEFF", 
+                        size=10,
+                        line=dict(width=1, color="white"),
+                        opacity=0.8
                     ),
-                    secondary_y=True
+                    name="Countries",
+                    hovertemplate="<b>%{text}</b><br>" + x_label + ": %{x:.1f}%<br>" + y_label + ": %{y:,.2f}<extra></extra>"
                 )
-                
-    # Style layout
+            )
+            
+            if len(df_plot) > 1:
+                import numpy as np
+                try:
+                    x = df_plot[x_col].values
+                    y = df_plot[y_col].values
+                    idx = np.isfinite(x) & np.isfinite(y)
+                    if np.sum(idx) > 1:
+                        coef = np.polyfit(x[idx], y[idx], 1)
+                        poly1d_fn = np.poly1d(coef)
+                        x_range = np.linspace(x.min(), x.max(), 100)
+                        y_fit = poly1d_fn(x_range)
+                        fig.add_trace(
+                            go.Scatter(
+                                x=x_range,
+                                y=y_fit,
+                                mode="lines",
+                                name="Trend Line",
+                                line=dict(color="#FFD166", width=2, dash="dash"),
+                                hoverinfo="skip"
+                            )
+                        )
+                except Exception as e:
+                    pass
+                    
+            fig.update_layout(
+                xaxis_title=x_label,
+                yaxis_title=y_label,
+            )
+            
     fig.update_layout(
         title=dict(
-            text="HCV Key Burden Indicators & Interventions over Time",
+            text="HCV Diagnosis/Treatment Access vs Disease Burden (2022)",
             font=dict(color="white", size=14)
         ),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="rgba(255,255,255,0.7)"),
         xaxis=dict(
-            title="Year",
             gridcolor="rgba(255,255,255,0.08)",
             linecolor="rgba(255,255,255,0.25)",
             showgrid=True,
             zeroline=False,
         ),
         yaxis=dict(
-            title="Percentage (%)",
             gridcolor="rgba(255,255,255,0.08)",
             linecolor="rgba(255,255,255,0.25)",
             showgrid=True,
-            zeroline=False,
-            range=[0, 105]
-        ),
-        yaxis2=dict(
-            title="Cases (New Infections / Cumulative Treatment)",
-            showgrid=False,
             zeroline=False,
         ),
         height=380,
         margin=dict(l=40, r=40, t=40, b=40),
         hovermode="closest",
+        showlegend=True,
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -6717,9 +6709,10 @@ def make_hcv_epi_trend_plot(regions, countries):
     Output("hbv-epi-priority-table", "children"),
     Input("continent-dropdown", "value"),
     Input("country-dropdown", "value"),
+    Input("hbv-y-metric", "value"),
 )
-def update_hbv_epi_row(regions, countries):
-    fig = make_hbv_epi_trend_plot(regions, countries)
+def update_hbv_epi_row(regions, countries, y_metric):
+    fig = make_hbv_epi_scatter_plot(regions, countries, y_metric)
     table = make_epi_priority_table("HBV", regions, countries)
     return fig, table
 
@@ -6729,9 +6722,11 @@ def update_hbv_epi_row(regions, countries):
     Output("hcv-epi-priority-table", "children"),
     Input("continent-dropdown", "value"),
     Input("country-dropdown", "value"),
+    Input("hcv-x-metric", "value"),
+    Input("hcv-y-metric", "value"),
 )
-def update_hcv_epi_row(regions, countries):
-    fig = make_hcv_epi_trend_plot(regions, countries)
+def update_hcv_epi_row(regions, countries, x_metric, y_metric):
+    fig = make_hcv_epi_scatter_plot(regions, countries, x_metric, y_metric)
     table = make_epi_priority_table("HCV", regions, countries)
     return fig, table
 
