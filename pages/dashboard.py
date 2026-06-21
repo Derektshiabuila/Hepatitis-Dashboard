@@ -3730,7 +3730,7 @@ def create_dashboard_layout():
                         ])
                     ], className="shadow-sm border-0 h-100")
                 ], xs=12, lg=6)
-            ], className="mb-4"),
+            ], id="hbv-epi-trends-row", className="mb-4", style={"display": "none"}),
 
             # Row 4: HCV Indicators & Priority Table
             dbc.Row([
@@ -3759,7 +3759,7 @@ def create_dashboard_layout():
                         ])
                     ], className="shadow-sm border-0 h-100")
                 ], xs=12, lg=6)
-            ], className="mb-4"),
+            ], id="hcv-epi-trends-row", className="mb-4", style={"display": "none"}),
 
             # Row 5: Detailed DataTable
             dbc.Row([
@@ -6630,10 +6630,10 @@ def make_hcv_epi_trend_plot(regions, countries):
                     go.Scatter(
                         x=[2022],
                         y=[treat_cum],
-                        name="HCV Cumulative Treatment (2022)",
+                        name="HCV Treatment by Year (2022)",
                         marker=dict(color="#4FAEFF", size=10, symbol="circle"),
                         mode="markers",
-                        hovertemplate="Cumulative Treatment: %{y:,.0f}<extra></extra>"
+                        hovertemplate="Treatment by Year: %{y:,.0f}<extra></extra>"
                     ),
                     secondary_y=True
                 )
@@ -6734,6 +6734,20 @@ def update_hcv_epi_row(regions, countries):
     fig = make_hcv_epi_trend_plot(regions, countries)
     table = make_epi_priority_table("HCV", regions, countries)
     return fig, table
+
+
+@callback(
+    Output("hbv-epi-trends-row", "style"),
+    Output("hcv-epi-trends-row", "style"),
+    Input("selected-virus", "data"),
+)
+def toggle_epi_trends_rows(virus):
+    if virus == "HBV":
+        return {"display": "flex"}, {"display": "none"}
+    elif virus == "HCV":
+        return {"display": "none"}, {"display": "flex"}
+    else:
+        return {"display": "none"}, {"display": "none"}
 
 
 
