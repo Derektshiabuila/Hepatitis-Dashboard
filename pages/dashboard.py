@@ -363,23 +363,35 @@ def compute_gap_df(
     cause_lookup = {"HBV": "Total burden related to hepatitis B", "HCV": "Total burden related to hepatitis C", "HEV": "Total burden related to hepatitis E"}
     cause = cause_lookup.get(virus.upper(), "")
 
-    burden = ihme_df[
+    # Filter by cause, measure, metric
+    base_burden = ihme_df[
         (ihme_df["cause"] == cause)
         & (ihme_df["measure"] == measure)
         & (ihme_df["metric"] == metric)
-        & (ihme_df["sex"] == sex)
-        & (ihme_df["age"] == "All ages")
     ].copy()
 
-    # Filter by years
+    # Filter by sex
+    if sex == "Both":
+        base_burden = base_burden[base_burden["sex"].isin(["Male", "Female"])]
+    else:
+        base_burden = base_burden[base_burden["sex"] == sex]
+
+    # Filter by years if specified
     if selected_years:
         y0, y1 = selected_years
-        burden = burden[(burden["year"] >= y0) & (burden["year"] <= y1)]
+        base_burden = base_burden[(base_burden["year"] >= y0) & (base_burden["year"] <= y1)]
 
-    # Aggregate per country (latest year in range)
-    if not burden.empty:
-        burden = burden[burden["year"] == burden["year"].max()]
-    burden = burden.groupby("Country_standard", as_index=False)["val"].sum().rename(columns={"val": "burden"})
+    # Sum over all ages and sexes per country/year
+    if not base_burden.empty:
+        # Group by country and year to get the yearly totals
+        yearly_burden = base_burden.groupby(["Country_standard", "year"], as_index=False)["val"].sum()
+        # Take the latest year in the range for each country
+        latest_years = yearly_burden.groupby("Country_standard")["year"].transform("max")
+        latest_burden = yearly_burden[yearly_burden["year"] == latest_years]
+        # Rename column
+        burden = latest_burden.rename(columns={"val": "burden"})[["Country_standard", "burden"]]
+    else:
+        burden = pd.DataFrame(columns=["Country_standard", "burden"])
 
     # --- merge and compute expected ---
     df = pd.merge(obs, burden, on="Country_standard", how="outer").fillna(0)
