@@ -1071,6 +1071,8 @@ div[class*="-option--is-selected"]::before,
 
 /* ── DROPDOWN COMPACT STYLING & FIXED HEIGHT ────────────────── */
 /* Set a fixed height on the dropdown controls for country and genotype */
+#country-dropdown .Select-control,
+#genotype-dropdown .Select-control,
 #country-dropdown div[class*="-control"],
 #genotype-dropdown div[class*="-control"] {
   height: 38px !important;
@@ -1080,6 +1082,8 @@ div[class*="-option--is-selected"]::before,
 }
 
 /* Make the selected chips area scrollable vertically within the fixed height */
+#country-dropdown .Select-multi-value-wrapper,
+#genotype-dropdown .Select-multi-value-wrapper,
 #country-dropdown div[class*="-valueContainer"],
 #genotype-dropdown div[class*="-valueContainer"] {
   max-height: 36px !important;
@@ -1090,10 +1094,14 @@ div[class*="-option--is-selected"]::before,
 }
 
 /* Hide scrollbar for cleaner look if desired, or keep it subtle */
+#country-dropdown .Select-multi-value-wrapper::-webkit-scrollbar,
+#genotype-dropdown .Select-multi-value-wrapper::-webkit-scrollbar,
 #country-dropdown div[class*="-valueContainer"]::-webkit-scrollbar,
 #genotype-dropdown div[class*="-valueContainer"]::-webkit-scrollbar {
   width: 4px !important;
 }
+#country-dropdown .Select-multi-value-wrapper::-webkit-scrollbar-thumb,
+#genotype-dropdown .Select-multi-value-wrapper::-webkit-scrollbar-thumb,
 #country-dropdown div[class*="-valueContainer"]::-webkit-scrollbar-thumb,
 #genotype-dropdown div[class*="-valueContainer"]::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2) !important;
@@ -1101,6 +1109,7 @@ div[class*="-option--is-selected"]::before,
 }
 
 /* Compact chips styling */
+.Select-value,
 div[class*="-multiValue"] {
   font-size: 0.75rem !important;
   margin: 1px !important;
@@ -1112,14 +1121,17 @@ div[class*="-multiValue"] {
   border: 1px solid rgba(0, 212, 170, 0.3) !important;
   border-radius: 4px !important;
 }
+.Select-value-label,
 div[class*="-multiValue"] div[class*="-multiValue__label"] {
   color: var(--text) !important;
   padding: 0 4px 0 0 !important;
 }
+.Select-value-icon,
 div[class*="-multiValue"] div[class*="-multiValue__remove"] {
   color: var(--text-dim) !important;
   cursor: pointer !important;
 }
+.Select-value-icon:hover,
 div[class*="-multiValue"] div[class*="-multiValue__remove"]:hover {
   background-color: rgba(255, 0, 0, 0.2) !important;
   color: #fff !important;
@@ -1127,12 +1139,15 @@ div[class*="-multiValue"] div[class*="-multiValue__remove"]:hover {
 
 /* ── REGION FILTER SUMMARY TEXT OVERRIDE ─────────────────────── */
 /* Hide the actual selected chips in the region dropdown */
+#continent-dropdown .Select-value,
 #continent-dropdown div[class*="-multiValue"] {
   display: none !important;
 }
 
-/* Force the value container to show the summary text custom property */
-#continent-dropdown div[class*="-valueContainer"]::after {
+/* Force the control and value containers to show the summary text */
+#continent-dropdown .Select-control::after,
+#continent-dropdown div[class*="-valueContainer"]::after,
+#continent-dropdown div[class*="-control"]::after {
   content: var(--selected-regions-summary, "") !important;
   color: var(--text) !important;
   font-family: var(--sans) !important;
@@ -1145,6 +1160,7 @@ div[class*="-multiValue"] div[class*="-multiValue__remove"]:hover {
 }
 
 /* Hide placeholder when summary is shown */
+#continent-dropdown.has-selections .Select-placeholder,
 #continent-dropdown.has-selections div[class*="-placeholder"] {
   display: none !important;
 }
