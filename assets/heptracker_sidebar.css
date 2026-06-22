@@ -1069,6 +1069,12 @@ div[class*="-option--is-selected"]::before,
   font-weight: bold !important;
 }
 
+/* Prevent double checkboxes when classes are nested in VirtualizedSelect */
+.VirtualizedSelectOption .Select-option::before,
+.VirtualizedSelectOption div[class*="-option"]::before {
+  display: none !important;
+}
+
 /* ── DROPDOWN COMPACT STYLING & FIXED HEIGHT ────────────────── */
 /* Set a fixed height on the dropdown controls for country and genotype */
 #country-dropdown .Select-control,
@@ -1108,8 +1114,8 @@ div[class*="-option--is-selected"]::before,
   border-radius: 2px !important;
 }
 
-/* Compact chips styling */
-.Select-value,
+/* Compact chips styling (only applied to multi-select dropdowns) */
+.Select--multi .Select-value,
 div[class*="-multiValue"] {
   font-size: 0.75rem !important;
   margin: 1px !important;
@@ -1121,17 +1127,17 @@ div[class*="-multiValue"] {
   border: 1px solid rgba(0, 212, 170, 0.3) !important;
   border-radius: 4px !important;
 }
-.Select-value-label,
+.Select--multi .Select-value-label,
 div[class*="-multiValue"] div[class*="-multiValue__label"] {
   color: var(--text) !important;
   padding: 0 4px 0 0 !important;
 }
-.Select-value-icon,
+.Select--multi .Select-value-icon,
 div[class*="-multiValue"] div[class*="-multiValue__remove"] {
   color: var(--text-dim) !important;
   cursor: pointer !important;
 }
-.Select-value-icon:hover,
+.Select--multi .Select-value-icon:hover,
 div[class*="-multiValue"] div[class*="-multiValue__remove"]:hover {
   background-color: rgba(255, 0, 0, 0.2) !important;
   color: #fff !important;
