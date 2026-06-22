@@ -936,11 +936,11 @@ footer a:hover { color: var(--text) !important; }
 /* ── DROPDOWN MENUS STACKING OVERRIDES ────────────────────────── */
 #common-filters {
   position: relative !important;
-  z-index: 300 !important;
+  z-index: 1100 !important;
 }
 #common-filters .card {
   position: relative !important;
-  z-index: 300 !important;
+  z-index: 1100 !important;
   overflow: visible !important;
 }
 #common-filters .card-body {

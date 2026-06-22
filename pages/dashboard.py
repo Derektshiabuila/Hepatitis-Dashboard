@@ -5145,6 +5145,7 @@ dash.clientside_callback(
         }
         
         const showBlock = {"display": "block"};
+        const showCommonFilters = {"display": "block", "position": "relative", "zIndex": 1100};
         const showFlex = {"display": "flex"};
         const hide = {"display": "none"};
         
@@ -5155,7 +5156,7 @@ dash.clientside_callback(
             active === "mutations" ? showBlock : hide,
             active === "epidemiology" ? showBlock : hide,
             active === "user-seq" ? showBlock : hide,
-            active === "user-seq" ? hide : showBlock,
+            active === "user-seq" ? hide : showCommonFilters,
             (active !== "epidemiology" && active !== "user-seq") ? showFlex : hide,
             active === "epidemiology" ? showFlex : hide
         ];
