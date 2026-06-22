@@ -327,6 +327,13 @@ def handle_global_search(search_clicks, search_submit, close_clicks, search_term
         from data_loader import normalize_accession_id
         normalized_term = normalize_accession_id(term)
         
+        def get_base_id(accession_id):
+            if not isinstance(accession_id, str):
+                return accession_id
+            return accession_id.split('.')[0].strip().upper()
+
+        term_base = get_base_id(normalized_term)
+        
         # Load from DATA_STORE
         store = app.server.config.get("DATA_STORE", {})
         if not store:
@@ -340,6 +347,8 @@ def handle_global_search(search_clicks, search_submit, close_clicks, search_term
             df = store.get(f"{v}_data", pd.DataFrame())
             if not df.empty and "ID" in df.columns:
                 res = df[df["ID"].apply(normalize_accession_id) == normalized_term]
+                if res.empty:
+                    res = df[df["ID"].apply(get_base_id) == term_base]
                 if not res.empty:
                     match_row = res.iloc[0]
                     virus_type = v.upper()
@@ -376,6 +385,8 @@ def handle_global_search(search_clicks, search_submit, close_clicks, search_term
             recomb_df = store.get(f"{virus_type.lower()}_recombs", pd.DataFrame())
             if not recomb_df.empty and "ID" in recomb_df.columns:
                 rec_res = recomb_df[recomb_df["ID"].apply(normalize_accession_id) == normalized_term]
+                if rec_res.empty:
+                    rec_res = recomb_df[recomb_df["ID"].apply(get_base_id) == term_base]
                 if not rec_res.empty:
                     recomb_row = rec_res.iloc[0]
                     parent_1 = recomb_row.get("parent_1", "Unknown")
@@ -444,6 +455,8 @@ def handle_global_search(search_clicks, search_submit, close_clicks, search_term
         mut_df = store.get(f"{virus_type.lower()}_mut", pd.DataFrame())
         if not mut_df.empty and "ID" in mut_df.columns:
             mut_res = mut_df[mut_df["ID"].apply(normalize_accession_id) == normalized_term]
+            if mut_res.empty:
+                mut_res = mut_df[mut_df["ID"].apply(get_base_id) == term_base]
             if not mut_res.empty:
                 mutation_rows = mut_res.to_dict("records")
                 
