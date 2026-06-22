@@ -6381,6 +6381,12 @@ def make_epi_priority_table(virus, regions, countries):
     }
     _, priority_df = create_priority_calculator(gap_df, data["ihme_df"], virus, weights)
     
+    if priority_df is None or priority_df.empty:
+        return html.Div(
+            "No priority data available for current filters",
+            className="hep-empty-table",
+        )
+        
     # 3. Merge with WHO GHO 2022 data for diagnosis and treatment rates
     who_gho_df = data.get("who_gho_df", pd.DataFrame())
     if not who_gho_df.empty:
