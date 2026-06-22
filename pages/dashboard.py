@@ -6229,8 +6229,7 @@ def update_gho_burden_map(virus, metric, regions, countries):
     }
     metric_label = metric_labels.get(metric, metric)
     
-    virus_color = VIRUS_COLORS.get(virus, "#E84057")
-    color_scale = sequential_scale(virus_color)
+    color_scale = "YlOrBr"
     
     fig = go.Figure(data=go.Choropleth(
         locations=df["country"],
