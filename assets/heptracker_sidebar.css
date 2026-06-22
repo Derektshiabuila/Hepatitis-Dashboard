@@ -1025,3 +1025,46 @@ footer a:hover { color: var(--text) !important; }
 .hep-sidebar:hover::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15) !important;
 }
+
+/* ── DROPDOWN OPTION CHECKBOXES / TICKBOXES ─────────────────── */
+div[class*="-option"], .Select-option, .VirtualizedSelectOption {
+  display: flex !important;
+  align-items: center !important;
+  padding-left: 12px !important;
+}
+
+div[class*="-option"]::before, .Select-option::before, .VirtualizedSelectOption::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 15px !important;
+  height: 15px !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.4) !important;
+  border-radius: 3px !important;
+  margin-right: 10px !important;
+  background-color: transparent !important;
+  flex-shrink: 0 !important;
+  transition: all 0.2s ease !important;
+}
+
+/* Hover/Focused option checkbox border color */
+div[class*="-option"]:hover::before, 
+div[class*="-option--is-focused"]::before,
+.Select-option.is-focused::before,
+.VirtualizedSelectFocusedOption::before {
+  border-color: var(--current-accent, #00d4aa) !important;
+  box-shadow: 0 0 4px var(--current-accent, #00d4aa) !important;
+}
+
+/* Selected option (checkmark inside checkbox) */
+div[class*="-option--is-selected"]::before,
+.Select-option.is-selected::before,
+.VirtualizedSelectOption.is-selected::before {
+  background-color: var(--current-accent, #00d4aa) !important;
+  border-color: var(--current-accent, #00d4aa) !important;
+  content: "✓" !important;
+  color: #121212 !important;
+  font-size: 11px !important;
+  line-height: 13px !important;
+  text-align: center !important;
+  font-weight: bold !important;
+}
