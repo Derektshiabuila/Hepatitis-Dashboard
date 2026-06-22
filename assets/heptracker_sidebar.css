@@ -1068,3 +1068,83 @@ div[class*="-option--is-selected"]::before,
   text-align: center !important;
   font-weight: bold !important;
 }
+
+/* ── DROPDOWN COMPACT STYLING & FIXED HEIGHT ────────────────── */
+/* Set a fixed height on the dropdown controls for country and genotype */
+#country-dropdown div[class*="-control"],
+#genotype-dropdown div[class*="-control"] {
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  overflow: hidden !important;
+}
+
+/* Make the selected chips area scrollable vertically within the fixed height */
+#country-dropdown div[class*="-valueContainer"],
+#genotype-dropdown div[class*="-valueContainer"] {
+  max-height: 36px !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  padding: 2px 8px !important;
+}
+
+/* Hide scrollbar for cleaner look if desired, or keep it subtle */
+#country-dropdown div[class*="-valueContainer"]::-webkit-scrollbar,
+#genotype-dropdown div[class*="-valueContainer"]::-webkit-scrollbar {
+  width: 4px !important;
+}
+#country-dropdown div[class*="-valueContainer"]::-webkit-scrollbar-thumb,
+#genotype-dropdown div[class*="-valueContainer"]::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-radius: 2px !important;
+}
+
+/* Compact chips styling */
+div[class*="-multiValue"] {
+  font-size: 0.75rem !important;
+  margin: 1px !important;
+  padding: 0px 4px !important;
+  height: 20px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  background-color: rgba(0, 212, 170, 0.15) !important;
+  border: 1px solid rgba(0, 212, 170, 0.3) !important;
+  border-radius: 4px !important;
+}
+div[class*="-multiValue"] div[class*="-multiValue__label"] {
+  color: var(--text) !important;
+  padding: 0 4px 0 0 !important;
+}
+div[class*="-multiValue"] div[class*="-multiValue__remove"] {
+  color: var(--text-dim) !important;
+  cursor: pointer !important;
+}
+div[class*="-multiValue"] div[class*="-multiValue__remove"]:hover {
+  background-color: rgba(255, 0, 0, 0.2) !important;
+  color: #fff !important;
+}
+
+/* ── REGION FILTER SUMMARY TEXT OVERRIDE ─────────────────────── */
+/* Hide the actual selected chips in the region dropdown */
+#continent-dropdown div[class*="-multiValue"] {
+  display: none !important;
+}
+
+/* Force the value container to show the summary text custom property */
+#continent-dropdown div[class*="-valueContainer"]::after {
+  content: var(--selected-regions-summary, "") !important;
+  color: var(--text) !important;
+  font-family: var(--sans) !important;
+  font-size: 0.9rem !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  left: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+}
+
+/* Hide placeholder when summary is shown */
+#continent-dropdown.has-selections div[class*="-placeholder"] {
+  display: none !important;
+}

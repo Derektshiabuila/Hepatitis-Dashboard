@@ -6901,6 +6901,21 @@ def update_year_range_label(year_range):
 
 
 @callback(
+    Output("continent-dropdown", "style"),
+    Output("continent-dropdown", "className"),
+    Input("continent-dropdown", "value")
+)
+def update_continent_dropdown_style(selected_values):
+    if not selected_values:
+        return {"--selected-regions-summary": '""'}, "hep-dropdown"
+    
+    count = len(selected_values)
+    summary_text = f"'{count} region selected'" if count == 1 else f"'{count} regions selected'"
+    return {"--selected-regions-summary": summary_text}, "hep-dropdown has-selections"
+
+
+
+@callback(
     Output("epi-prevalence-total", "children"),
     Output("epi-prevalence-trend", "children"),
     Output("epi-incidence-total", "children"),
