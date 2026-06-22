@@ -3109,7 +3109,7 @@ def create_dashboard_layout():
                     ])
                 ], className="mb-4 shadow-sm border-0")
             ], width=12)
-        ], id="common-filters", style={"position": "relative", "zIndex": 100}),
+        ], id="common-filters", style={"position": "relative", "zIndex": 1100}),
 
 
         # === TAB 1: OVERVIEW CONTENT (DEFAULT) ===
