@@ -3068,7 +3068,7 @@ def create_dashboard_layout():
                                         className="hep-range-slider"
                                     )
                                 ], style={"paddingLeft": "5px", "paddingRight": "5px"})
-                            ], xs=12, lg=5, className="mb-3 mb-lg-0"),
+                            ], xs=12, lg=4, className="mb-3 mb-lg-0"),
                             
                             # Region dropdown
                             dbc.Col([
@@ -3080,7 +3080,7 @@ def create_dashboard_layout():
                                     placeholder="All regions",
                                     className="hep-dropdown"
                                 )
-                            ], xs=12, lg=2, className="mb-3 mb-lg-0"),
+                            ], xs=12, lg=3, className="mb-3 mb-lg-0"),
                             
                             # Country dropdown
                             dbc.Col([

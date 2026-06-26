@@ -720,7 +720,7 @@ div[class*="-Input"] input { color: var(--text) !important; }
 .hep-main-sticky-header {
   position: sticky;
   top: 0;
-  z-index: 1005;
+  z-index: 1200 !important;
   background-color: #07111A;
   border-bottom: 1px solid var(--border);
   margin-bottom: 16px;
@@ -845,7 +845,10 @@ footer a:hover { color: var(--text) !important; }
 ::-webkit-scrollbar-thumb:hover { opacity: 0.8; }
 
 /* ── FOCUS RING ──────────────────────────────────────────────── */
-:focus-visible {
+button:focus-visible,
+a:focus-visible,
+input:not(.Select-input input):focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--hcv) !important;
   outline-offset: 2px;
 }
@@ -1115,8 +1118,8 @@ div[class*="-option--is-selected"]::before,
 }
 
 /* Compact chips styling (only applied to multi-select dropdowns) */
-.Select--multi .Select-value,
-div[class*="-multiValue"] {
+.hep-dropdown .Select--multi .Select-value,
+.hep-dropdown div[class*="-multiValue"] {
   font-size: 0.75rem !important;
   margin: 1px !important;
   padding: 0px 4px !important;
@@ -1170,3 +1173,105 @@ div[class*="-multiValue"] div[class*="-multiValue__remove"]:hover {
 #continent-dropdown.has-selections div[class*="-placeholder"] {
   display: none !important;
 }
+
+/* ── FIX: remove green vertical divider lines in multi-select dropdown chips ── */
+.hep-dropdown .Select--multi .Select-value-icon,
+.hep-dropdown .Select-value-icon,
+.hep-dropdown div[class*="-multiValue__remove"],
+.hep-dropdown div[class*="-multiValue"] > div:first-child {
+  border-right: none !important;
+  border-left: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: var(--text-dim) !important;
+  padding: 0 6px !important;
+}
+
+/* Clean selected chips */
+.hep-dropdown .Select--multi .Select-value,
+.hep-dropdown div[class*="-multiValue"] {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(148, 163, 184, 0.25) !important;
+  border-radius: 7px !important;
+  overflow: hidden !important;
+}
+
+/* Prevent selected labels from wrapping badly */
+.hep-dropdown .Select--multi .Select-value-label,
+.hep-dropdown div[class*="-multiValue__label"] {
+  color: var(--text) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Remove any accent-colored focus line inside the input area */
+.hep-dropdown .Select-input,
+.hep-dropdown .Select-input input,
+.hep-dropdown div[class*="-input"],
+.hep-dropdown div[class*="-Input"] {
+  border-left: none !important;
+  border-right: none !important;
+  box-shadow: none !important;
+}
+
+/* ── FIX: remove green focus bars inside Dash dcc.Dropdown search input ── */
+.hep-dropdown input,
+.hep-dropdown .Select-input,
+.hep-dropdown .Select-input input,
+.hep-dropdown div[class*="-input"],
+.hep-dropdown div[class*="-Input"],
+.hep-dropdown div[class*="-input"] input,
+.hep-dropdown div[class*="-Input"] input {
+  outline: none !important;
+  outline-offset: 0 !important;
+  border: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* Keep normal dropdown control focus clean */
+.hep-dropdown .Select-control:focus,
+.hep-dropdown .Select-control:focus-visible,
+.hep-dropdown div[class*="-control"]:focus,
+.hep-dropdown div[class*="-control"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Optional: use only outer border highlight, not inner green input bars */
+.hep-dropdown.is-focused .Select-control,
+.hep-dropdown .Select-control:hover,
+.hep-dropdown div[class*="-control"]:hover {
+  border-color: rgba(148, 163, 184, 0.45) !important;
+}
+
+/* ── FIX: prevent long dropdown options from squashing/overlapping ── */
+.hep-dropdown .VirtualizedSelectOption,
+.hep-dropdown .Select-option,
+.hep-dropdown div[class*="-option"] {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  flex-wrap: nowrap !important;
+  min-height: 38px !important;
+  line-height: 38px !important;
+  font-size: 0.95rem !important;
+}
+
+/* Keep checkbox aligned with single-line option text */
+.hep-dropdown .VirtualizedSelectOption::before,
+.hep-dropdown .Select-option::before,
+.hep-dropdown div[class*="-option"]::before {
+  flex: 0 0 15px !important;
+  margin-right: 10px !important;
+}
+
+/* Give Region dropdown menu enough width for long WHO region names */
+#continent-dropdown .Select-menu-outer,
+#continent-dropdown div[class*="-menu"] {
+  min-width: 300px !important;
+}
+
