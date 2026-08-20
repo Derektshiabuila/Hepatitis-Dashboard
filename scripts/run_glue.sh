@@ -71,15 +71,25 @@ with open(out_dir / 'glue_cmd.glue', 'w') as cmd_f:
     cmd_f.write('\n'.join(glue_cmds) + '\nexit\n')
 "
 
+# Check if Docker daemon is responsive
+if ! docker info >/dev/null 2>&1; then
+    echo "WARNING: Docker daemon is not running or accessible." >&2
+    echo "GLUE mutation analysis requires Docker and the 'gluetools-mysql-${VIRUS}' container." >&2
+    echo "To enable GLUE mutation analysis, please start Docker Desktop ('open -a Docker') and run:" >&2
+    echo "  docker start gluetools-mysql-${VIRUS}" >&2
+    echo "Skipping GLUE mutation step gracefully." >&2
+    exit 0
+fi
+
 # Ensure the MySQL container for this virus is running
 MYSQL_CONTAINER="gluetools-mysql-${VIRUS}"
 if ! docker ps --format '{{.Names}}' | grep -q "^${MYSQL_CONTAINER}$"; then
-    echo "MySQL container '${MYSQL_CONTAINER}' is not running. Starting it..." >&2
-    docker start "$MYSQL_CONTAINER" 2>/dev/null || {
-        echo "ERROR: Could not start ${MYSQL_CONTAINER}. Is it created?" >&2
-        echo "Try: docker start ${MYSQL_CONTAINER}" >&2
-        exit 1
-    }
+    echo "MySQL container '${MYSQL_CONTAINER}' is not running. Attempting to start it..." >&2
+    if ! docker start "$MYSQL_CONTAINER" 2>/dev/null; then
+        echo "WARNING: Could not start ${MYSQL_CONTAINER}. GLUE mutation analysis skipped." >&2
+        echo "Try starting it manually with: docker start ${MYSQL_CONTAINER}" >&2
+        exit 0
+    fi
 fi
 
 # Wait for MySQL to accept connections (up to 30 seconds)

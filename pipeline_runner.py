@@ -195,6 +195,52 @@ def get_job_status(job_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# AUTOMATED DOCKER & GLUE ENVIRONMENT MANAGEMENT
+# ---------------------------------------------------------------------------
+
+def ensure_docker_environment():
+    """
+    Automates starting Docker Desktop (if on macOS) and launching all GLUE MySQL containers
+    (gluetools-mysql-hbv, gluetools-mysql-hcv, gluetools-mysql-hev) so GLUE analysis is always ready.
+    Runs asynchronously in a background thread so it doesn't block the dashboard startup.
+    """
+    import platform
+    import subprocess
+    import time
+    from threading import Thread
+
+    def _init_docker():
+        try:
+            # Check if Docker daemon is responsive
+            res = subprocess.run(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if res.returncode != 0:
+                if platform.system() == "Darwin":
+                    logger.info("Docker daemon not running. Launching Docker Desktop ('open -a Docker')...")
+                    subprocess.run(["open", "-a", "Docker"], check=False)
+                    for _ in range(25):
+                        time.sleep(1)
+                        if subprocess.run(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+                            logger.info("Docker daemon is now responsive.")
+                            break
+        except Exception as err:
+            logger.warning("Could not check/launch Docker Desktop: %s", err)
+
+        # Start GLUE MySQL containers for HBV, HCV, HEV
+        for virus in ["hbv", "hcv", "hev"]:
+            c_name = f"gluetools-mysql-{virus}"
+            try:
+                subprocess.run(["docker", "start", c_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
+    t = Thread(target=_init_docker, daemon=True)
+    t.start()
+
+# Automatically trigger environment check on module import
+ensure_docker_environment()
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -218,6 +264,7 @@ def dispatch_user_pipeline(validated_data: dict, run_recombination: bool = False
     -------
     str  — UUID job identifier
     """
+    ensure_docker_environment()
     job_id = str(uuid.uuid4())
     jdir   = _job_dir(job_id)
 
@@ -780,13 +827,17 @@ def _run_glue_mutation(user_fasta: Path, virus: str, jdir: Path) -> dict:
         # which internally calls: gluetools.sh -p batchfile scripts/glue/<virus>_resistance.glue
         glue_wrapper = PROJECT_ROOT / "scripts" / "run_glue.sh"
         if glue_wrapper.exists():
-            _run(
-                ["bash", str(glue_wrapper),
-                 str(fasta_dest), virus, str(job_results_dir)],
-                cwd=str(PROJECT_ROOT),
-                label="GLUE",
-                timeout=3600,
-            )
+            try:
+                _run(
+                    ["bash", str(glue_wrapper),
+                     str(fasta_dest), virus, str(job_results_dir)],
+                    cwd=str(PROJECT_ROOT),
+                    label="GLUE",
+                    timeout=3600,
+                )
+            except Exception as glue_err:
+                logger.warning("GLUE mutation step skipped/failed: %s", glue_err)
+                return {}
         else:
             # Fallback: invoke Snakemake targeting just the per-sequence GLUE rule.
             # Use --allowed-rules to avoid DAG ambiguity with dynamic checkpoint targets.
@@ -1218,8 +1269,13 @@ def _assemble_results(sequences, virus_lc, genotype_map, recomb_results,
             "id":             sid,
             "virus":          virus_lc.upper(),
             "genotype":       geno.get("genotype", "Unknown"),
+            "length":         rec.get("length") or len(rec.get("seq", "")),
             "is_recombinant": recomb["is_recombinant"],
             "validation_status": recomb.get("validation_status", "none"),
+            "passed_3seq":    recomb.get("passed_3seq", recomb.get("validation_status", "none") != "none"),
+            "passed_filters": recomb.get("passed_filters", recomb.get("validation_status", "none") != "none"),
+            "passed_openrdp": recomb.get("passed_openrdp", recomb.get("validation_status") == "high_confidence"),
+            "passed_tree":    recomb.get("passed_tree", recomb.get("validation_status") == "high_confidence"),
             "breakpoints":    recomb["breakpoints"],
             "nearest_ref":    geno.get("nearest_ref", "—"),
             "epa_score":      geno.get("epa_score", 0.0),

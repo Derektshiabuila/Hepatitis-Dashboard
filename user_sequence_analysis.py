@@ -43,6 +43,38 @@ import dash
 from dash import Input, Output, State, callback, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
+from hep_theme import genotype_palette, VIRUS_COLORS, _GENOTYPE_COLOR_LOOKUP, apply_heptracker_figure_style
+
+# ---------------------------------------------------------------------------
+# GENOTYPE COLOR PALETTE LOOKUP (Synchronized with Genotypes Tab)
+# ---------------------------------------------------------------------------
+HBV_GENOTYPE_COLORS = genotype_palette("HBV", VIRUS_COLORS.get("HBV", "#08519c"), list("ABCDEFGHIJ"))
+HCV_GENOTYPE_COLORS = genotype_palette("HCV", VIRUS_COLORS.get("HCV", "#e6550d"), [str(i) for i in range(1, 9)])
+HEV_GENOTYPE_COLORS = genotype_palette("HEV", VIRUS_COLORS.get("HEV", "#2ca25f"), [str(i) for i in range(1, 9)])
+
+def get_genotype_color(virus: str, genotype: str) -> str:
+    v = (virus or "HBV").upper()
+    g = str(genotype or "").strip()
+    
+    if v == "HBV":
+        palette = HBV_GENOTYPE_COLORS
+    elif v == "HCV":
+        palette = HCV_GENOTYPE_COLORS
+    else:
+        palette = HEV_GENOTYPE_COLORS
+        
+    if g in palette:
+        return palette[g]
+    pref_g = f"{v}-{g}"
+    if pref_g in palette:
+        return palette[pref_g]
+        
+    clean = re.sub(r'^(HBV|HCV|HEV|Genotype)[-_\s]*', '', g, flags=re.IGNORECASE)
+    base_char = clean[0].upper() if clean else ""
+    if base_char in _GENOTYPE_COLOR_LOOKUP:
+        return _GENOTYPE_COLOR_LOOKUP[base_char]
+        
+    return VIRUS_COLORS.get(v, "#0d6efd")
 
 # ---------------------------------------------------------------------------
 # CONSTANTS
@@ -95,6 +127,9 @@ def USER_SEQ_STORES():
             n_intervals=0,
             disabled=True,
         ),
+        # Download components for TSV results & Newick tree
+        dcc.Download(id="useq-download-tsv-component"),
+        dcc.Download(id="useq-download-tree-component"),
     ]
 
 
@@ -136,7 +171,7 @@ def user_seq_tab_content():
                             html.H5(
                                 [html.I(className="bi bi-upload me-2"),
                                  "Submit Your Sequences"],
-                                className="mb-3"
+                                className="hep-card-title mb-3"
                             ),
 
                             # Instructions
@@ -246,41 +281,32 @@ def user_seq_tab_content():
 
                             html.Hr(),
 
-                            # Validate + Submit buttons
+                            # Single Run Analysis Action button + Recombination toggle switch
                             dbc.Row([
                                 dbc.Col([
                                     dbc.Button(
-                                        [html.I(className="bi bi-check2-circle me-2"),
-                                         "Validate Sequences"],
-                                        id="useq-btn-validate",
-                                        color="secondary",
-                                        outline=True,
-                                        className="me-2",
-                                    ),
-                                    dbc.Button(
-                                        [html.I(className="bi bi-lightning-charge-fill me-2"),
-                                         "Run Basic Analysis"],
+                                        [html.I(className="bi bi-play-circle-fill me-2"),
+                                         "Run Analysis"],
                                         id="useq-btn-run",
-                                        color="success",
-                                        disabled=True,   # enabled only after validation passes
-                                        className="me-2",
+                                        className="hep-btn-primary me-3 d-inline-flex align-items-center",
                                     ),
-                                    dbc.Button(
-                                        [html.I(className="bi bi-shuffle me-2"),
-                                         "Run Recombination Analysis"],
-                                        id="useq-btn-recomb",
-                                        color="primary",
-                                        disabled=True,   # enabled only after validation passes
+                                    dbc.Checklist(
+                                        id="useq-toggle-recomb",
+                                        options=[
+                                            {"label": "Include Recombination Analysis (3Seq / RDP)", "value": "include"}
+                                        ],
+                                        value=[],
+                                        switch=True,
+                                        inline=True,
+                                        className="d-inline-block align-middle hep-body-text fw-semibold",
                                     ),
-                                ], width="auto"),
+                                ], width="auto", className="d-flex align-items-center"),
 
                                 dbc.Col([
                                     dbc.Button(
                                         [html.I(className="bi bi-x-circle me-2"), "Clear"],
                                         id="useq-btn-clear",
-                                        color="danger",
-                                        outline=True,
-                                        size="sm",
+                                        className="hep-btn-danger d-inline-flex align-items-center",
                                     ),
                                 ], width="auto", className="ms-auto d-flex align-items-center"),
                             ], className="mt-3"),
@@ -342,7 +368,10 @@ def user_seq_tab_content():
                 style={"display": "none"},
                 children=[
 
-                    # 4a: Summary table
+                    # 4a: 5 KPI Summary Cards
+                    html.Div(id="useq-kpi-cards-container", className="mb-4"),
+
+                    # 4b: Sequence Summary Table
                     dbc.Row([
                         dbc.Col([
                             dbc.Card([
@@ -350,7 +379,7 @@ def user_seq_tab_content():
                                     html.H5(
                                         [html.I(className="bi bi-table me-2"),
                                          "Sequence Summary"],
-                                        className="mb-3",
+                                        className="hep-card-title mb-3",
                                     ),
                                     html.Div(id="useq-summary-table"),
                                 ])
@@ -358,14 +387,17 @@ def user_seq_tab_content():
                         ], width=12)
                     ]),
 
-                    # 4b: Mutations & Drug Resistance panel
+                    # 4c: Genotype Composition & HepTracker Comparison
+                    html.Div(id="useq-genotype-comparison-container", className="mb-4"),
+
+                    # 4d: Mutations & Drug Resistance panel
                     dbc.Row([
                         dbc.Col([
                             html.Div(id="useq-mutations-panel")
                         ], width=12)
                     ], className="mb-4"),
 
-                    # 4c: Phylogenetic tree + recombination side by side
+                    # 4e: Phylogenetic tree + recombination side by side
                     dbc.Row([
                         dbc.Col([
                             dbc.Card([
@@ -373,22 +405,19 @@ def user_seq_tab_content():
                                     html.H5(
                                         [html.I(className="bi bi-diagram-2 me-2"),
                                          "Phylogenetic Placement"],
-                                        className="mb-3",
+                                        className="hep-card-title mb-3",
                                     ),
                                     html.Small(
                                         "User sequences (●) placed onto the reference tree. "
                                         "Reference sequences shown in grey.",
-                                        className="text-muted d-block mb-3",
+                                        className="hep-meta-text d-block mb-3",
                                     ),
-                                    # The tree is rendered by your front-end viewer;
-                                    # this Div receives the Newick string as a data attribute
-                                    # and is hydrated by a clientside callback (see below).
                                     html.Div(
                                         id="useq-phylo-tree-container",
                                         style={"minHeight": "400px"},
                                     ),
                                 ])
-                            ], className="shadow-sm")
+                            ], className="shadow-sm h-100")
                         ], width=7),
 
                         dbc.Col([
@@ -397,28 +426,28 @@ def user_seq_tab_content():
                                     html.H5(
                                         [html.I(className="bi bi-shuffle me-2"),
                                          "Recombination Analysis"],
-                                        className="mb-3",
+                                        className="hep-card-title mb-3",
                                     ),
                                     html.Div(id="useq-recombination-panel"),
                                     html.Div(
                                         dbc.Button(
                                             [
                                                 html.I(className="bi bi-shuffle me-2"),
-                                                "Run Recombination Analysis (3Seq)"
+                                                "Run recombination analysis"
                                             ],
                                             id="useq-btn-run-recombination-inline",
                                             color="primary",
-                                            className="w-100 mt-3"
+                                            className="w-100 mt-3 fw-bold"
                                         ),
                                         id="useq-recombination-inline-btn-container",
                                         style={"display": "none"}
                                     ),
                                 ])
-                            ], className="shadow-sm")
+                            ], className="shadow-sm h-100")
                         ], width=5),
                     ], className="mb-4"),
 
-                    # 4c: Sequence map (linear genome annotation)
+                    # 4f: Sequence map (linear genome annotation)
                     dbc.Row([
                         dbc.Col([
                             dbc.Card([
@@ -426,20 +455,51 @@ def user_seq_tab_content():
                                     html.H5(
                                         [html.I(className="bi bi-map me-2"),
                                          "Sequence Map"],
-                                        className="mb-3",
+                                        className="hep-card-title mb-3",
                                     ),
                                     html.Small(
                                         "ORFs, genotype-defining mutations, and "
                                         "recombination breakpoints relative to the "
                                         "reference genome.",
-                                        className="text-muted d-block mb-3",
+                                        className="hep-meta-text d-block mb-3",
                                     ),
                                     dcc.Graph(
                                         id="useq-sequence-map-graph",
                                         config={"displayModeBar": False},
                                     ),
                                 ])
-                            ], className="shadow-sm")
+                            ], className="shadow-sm mb-4")
+                        ], width=12)
+                    ]),
+
+                    # 4g: Download Export Section (.tsv & .nwk)
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Card([
+                                dbc.CardBody([
+                                    html.H5(
+                                        [html.I(className="bi bi-download me-2 text-primary"),
+                                         "Export Results & Phylogenetic Tree"],
+                                        className="hep-card-title mb-2",
+                                    ),
+                                    html.Small(
+                                        "Download complete sequence analysis records in TSV format or export the phylogenetic placement tree in Newick format.",
+                                        className="text-muted d-block mb-3",
+                                    ),
+                                    html.Div([
+                                        dbc.Button(
+                                            [html.I(className="bi bi-file-earmark-spreadsheet-fill me-2"), "Download Results (.tsv)"],
+                                            id="useq-btn-download-tsv",
+                                            className="hep-btn-primary me-3 d-inline-flex align-items-center",
+                                        ),
+                                        dbc.Button(
+                                            [html.I(className="bi bi-diagram-3-fill me-2"), "Download Tree (.nwk)"],
+                                            id="useq-btn-download-tree",
+                                            className="hep-btn-secondary d-inline-flex align-items-center",
+                                        ),
+                                    ], className="d-flex align-items-center flex-wrap gap-2")
+                                ])
+                            ], className="shadow-sm border-0 bg-white rounded-3 mb-4")
                         ], width=12)
                     ]),
                 ],
@@ -693,8 +753,7 @@ def show_upload_filename(filename):
     Output("useq-file-upload",         "filename"),
     Output("useq-validation-feedback", "children"),
     Output("useq-validated-store",     "data"),
-    Output("useq-btn-run",             "disabled"),
-    Output("useq-btn-recomb",          "disabled"),
+    Output("useq-toggle-recomb",       "value"),
     Output("useq-results-section",     "style"),
     Output("useq-progress-section",    "style"),
     Output("useq-virus-select",        "value"),
@@ -708,155 +767,46 @@ def clear_all(n_clicks):
         None,                       # upload filename
         [],                         # validation feedback
         None,                       # validated store
-        True,                       # run button disabled
-        True,                       # recomb button disabled
+        [],                         # reset recombination toggle
         {"display": "none"},        # results section
         {"display": "none"},        # progress section
         "auto",                     # virus select reset
     )
 
 
-# ── 4. Validate callback ─────────────────────────────────────────────────
-# Triggered by the Validate button OR when a file is uploaded.
+# ── 4. Run Analysis (Auto-Validate & Dispatch) callback ───────────────────
 @callback(
     Output("useq-validation-feedback", "children",  allow_duplicate=True),
     Output("useq-validated-store",     "data",      allow_duplicate=True),
-    Output("useq-btn-run",             "disabled",  allow_duplicate=True),
-    Output("useq-btn-recomb",          "disabled",  allow_duplicate=True),
-    Input("useq-btn-validate",  "n_clicks"),
-    Input("useq-file-upload",   "contents"),
-    State("useq-fasta-textarea", "value"),
-    State("useq-file-upload",    "filename"),
-    State("useq-input-mode-tabs", "active_tab"),
-    State("useq-virus-select",  "value"),
-    prevent_initial_call=True,
-)
-def validate_sequences(n_clicks, upload_contents, textarea_value,
-                       upload_filename, active_tab, selected_virus_override):
-    """
-    1. Determine the FASTA source (paste vs upload).
-    2. Parse the FASTA.
-    3. Validate sequences.
-    4. Store validated sequences & enable Run buttons if no blocking errors.
-    """
-    triggered = ctx.triggered_id
-
-    # ── Resolve FASTA text ──
-    fasta_text = ""
-
-    if triggered == "useq-file-upload" or active_tab == "upload":
-        if not upload_contents:
-            raise PreventUpdate
-        # Decode base64 file contents (dcc.Upload always returns base64)
-        content_type, content_string = upload_contents.split(",", 1)
-        decoded = base64.b64decode(content_string).decode("utf-8", errors="replace")
-        fasta_text = decoded
-    else:
-        # Paste mode
-        fasta_text = textarea_value or ""
-
-    if not fasta_text.strip():
-        alert = dbc.Alert(
-            "Please paste or upload a FASTA sequence first.",
-            color="secondary",
-        )
-        return alert, None, True, True
-
-    # ── Parse ──
-    sequences, parse_errors = _parse_fasta(fasta_text)
-
-    # ── Validate ──
-    validation_issues = _validate_sequences(sequences)
-
-    # ── Detect virus ──
-    if selected_virus_override and selected_virus_override != "auto":
-        detected_virus = selected_virus_override
-    else:
-        detected_virus = _detect_virus(sequences) if sequences else None
-
-    # ── Determine if blocking errors exist ──
-    blocking = bool(
-        parse_errors
-        or any(
-            any(k in issue for k in ("Too many", "illegal", "empty"))
-            for issue in validation_issues
-        )
-        or len(sequences) == 0
-    )
-
-    # ── Build alert UI ──
-    alert = _build_validation_alert(
-        sequences, parse_errors, validation_issues, detected_virus
-    )
-
-    # ── Store & button state ──
-    store_data = None
-    btn_disabled = True
-
-    if not blocking and sequences:
-        store_data = {
-            "sequences": sequences,
-            "detected_virus": detected_virus,
-            "validated_at": datetime.utcnow().isoformat(),
-            "count": len(sequences),
-        }
-        btn_disabled = False
-
-    return alert, store_data, btn_disabled, btn_disabled
-
-
-# ── 5. Run Analysis buttons (Basic, Recomb, and Inline Recomb) ───────────
-@callback(
-    Output("useq-job-state",        "data",     allow_duplicate=True),
-    Output("useq-job-id",           "data",     allow_duplicate=True),
-    Output("useq-progress-section", "style",    allow_duplicate=True),
-    Output("useq-progress-label",   "children", allow_duplicate=True),
-    Output("useq-progress-bar",     "value",    allow_duplicate=True),
-    Output("useq-poll-interval",    "disabled", allow_duplicate=True),
-    Output("useq-results-section",  "style",    allow_duplicate=True),
-    Input("useq-btn-run",           "n_clicks"),
-    Input("useq-btn-recomb",        "n_clicks"),
+    Output("useq-job-state",            "data",      allow_duplicate=True),
+    Output("useq-job-id",               "data",      allow_duplicate=True),
+    Output("useq-progress-section",     "style",     allow_duplicate=True),
+    Output("useq-progress-label",       "children",  allow_duplicate=True),
+    Output("useq-progress-bar",         "value",     allow_duplicate=True),
+    Output("useq-poll-interval",        "disabled",  allow_duplicate=True),
+    Output("useq-results-section",      "style",     allow_duplicate=True),
+    Input("useq-btn-run",               "n_clicks"),
     Input("useq-btn-run-recombination-inline", "n_clicks"),
-    State("useq-validated-store",   "data"),
-    State("useq-job-id",            "data"),
+    State("useq-file-upload",           "contents"),
+    State("useq-fasta-textarea",         "value"),
+    State("useq-file-upload",            "filename"),
+    State("useq-input-mode-tabs",        "active_tab"),
+    State("useq-virus-select",          "value"),
+    State("useq-toggle-recomb",         "value"),
+    State("useq-job-id",                "data"),
     prevent_initial_call=True,
 )
-def start_analysis(run_clicks, recomb_clicks, inline_clicks, validated_data, current_job_id):
-    triggered = ctx.triggered_id
+def start_analysis_auto_validate(run_clicks, inline_recomb_clicks, upload_contents,
+                                textarea_value, upload_filename, active_tab,
+                                selected_virus_override, recomb_toggle, current_job_id):
+    try:
+        triggered = ctx.triggered_id
+    except Exception:
+        triggered = "useq-btn-run"
     if not triggered:
-        raise PreventUpdate
+        triggered = "useq-btn-run"
 
-    if triggered == "useq-btn-run":
-        if not validated_data:
-            raise PreventUpdate
-        from pipeline_runner import dispatch_user_pipeline
-        job_id = dispatch_user_pipeline(validated_data, run_recombination=False)
-        return (
-            "pending",
-            job_id,
-            {"display": "block"},
-            "Submitting job…",
-            5,
-            False,
-            {"display": "none"},
-        )
-
-    elif triggered == "useq-btn-recomb":
-        if not validated_data:
-            raise PreventUpdate
-        from pipeline_runner import dispatch_user_pipeline
-        job_id = dispatch_user_pipeline(validated_data, run_recombination=True)
-        return (
-            "pending",
-            job_id,
-            {"display": "block"},
-            "Submitting job…",
-            5,
-            False,
-            {"display": "none"},
-        )
-
-    elif triggered == "useq-btn-run-recombination-inline":
+    if triggered == "useq-btn-run-recombination-inline":
         if not current_job_id:
             raise PreventUpdate
         from pipeline_runner import dispatch_recombination_only
@@ -864,16 +814,75 @@ def start_analysis(run_clicks, recomb_clicks, inline_clicks, validated_data, cur
         if not success:
             raise PreventUpdate
         return (
-            "running",
-            current_job_id,
-            {"display": "block"},
-            "Queuing recombination analysis…",
-            80,
-            False,
-            dash.no_update,
+            dash.no_update, dash.no_update,
+            "running", current_job_id,
+            {"display": "block"}, "Queuing recombination analysis…",
+            80, False, dash.no_update,
         )
 
-    raise PreventUpdate
+    # ── 1. Resolve FASTA text ──
+    fasta_text = ""
+    if active_tab == "upload" or (triggered == "useq-file-upload" and upload_contents):
+        if not upload_contents:
+            alert = dbc.Alert("Please upload a valid FASTA file.", color="warning", className="border-0 shadow-sm")
+            return alert, None, None, None, {"display": "none"}, "", 0, True, {"display": "none"}
+        content_type, content_string = upload_contents.split(",", 1)
+        fasta_text = base64.b64decode(content_string).decode("utf-8", errors="replace")
+    else:
+        fasta_text = textarea_value or ""
+
+    if not fasta_text.strip():
+        alert = dbc.Alert(
+            [html.I(className="bi bi-exclamation-circle-fill me-2"), "Please paste or upload a FASTA sequence first."],
+            color="warning", className="border-0 shadow-sm"
+        )
+        return alert, None, None, None, {"display": "none"}, "", 0, True, {"display": "none"}
+
+    # ── 2. Validate FASTA ──
+    sequences, parse_errors = _parse_fasta(fasta_text)
+    validation_issues = _validate_sequences(sequences)
+
+    if selected_virus_override and selected_virus_override != "auto":
+        detected_virus = selected_virus_override
+    else:
+        detected_virus = _detect_virus(sequences) if sequences else None
+
+    blocking = bool(
+        parse_errors
+        or any(any(k in issue for k in ("Too many", "illegal", "empty")) for issue in validation_issues)
+        or len(sequences) == 0
+    )
+
+    alert = _build_validation_alert(sequences, parse_errors, validation_issues, detected_virus)
+
+    if blocking or not sequences:
+        # Halt execution and show validation feedback alert
+        return alert, None, None, None, {"display": "none"}, "", 0, True, {"display": "none"}
+
+    validated_data = {
+        "sequences": sequences,
+        "detected_virus": detected_virus,
+        "validated_at": datetime.utcnow().isoformat(),
+        "count": len(sequences),
+    }
+
+    # ── 3. Automatically Dispatch Pipeline ──
+    run_recombination = ("include" in recomb_toggle) if recomb_toggle else False
+
+    from pipeline_runner import dispatch_user_pipeline
+    job_id = dispatch_user_pipeline(validated_data, run_recombination=run_recombination)
+
+    return (
+        alert,
+        validated_data,
+        "pending",
+        job_id,
+        {"display": "block"},
+        "Submitting analysis job…",
+        5,
+        False,
+        {"display": "none"},
+    )
 
 
 # ── 6. Polling callback ──────────────────────────────────────────────────
@@ -947,153 +956,416 @@ def poll_job_status(n_intervals, job_id, current_state):
 
 # ── 7. Render results ────────────────────────────────────────────────────
 @callback(
-    Output("useq-summary-table",         "children"),
-    Output("useq-recombination-panel",   "children"),
-    Output("useq-mutations-panel",       "children"),
-    Output("useq-sequence-map-graph",    "figure"),
-    Output("useq-phylo-tree-container",  "children"),
+    Output("useq-kpi-cards-container",           "children"),
+    Output("useq-summary-table",               "children"),
+    Output("useq-genotype-comparison-container", "children"),
+    Output("useq-recombination-panel",         "children"),
+    Output("useq-mutations-panel",             "children"),
+    Output("useq-sequence-map-graph",          "figure"),
+    Output("useq-phylo-tree-container",        "children"),
     Output("useq-recombination-inline-btn-container", "style"),
     Input("useq-results-store", "data"),
     prevent_initial_call=True,
 )
 def render_results(results):
-    """
-    Populates the four result panels from the pipeline output dict.
-
-    Expected results schema
-    -----------------------
-    {
-      "sequences": [
-        {
-          "id":          str,           # sequence ID
-          "virus":       str,           # "HBV" | "HCV" | "HEV"
-          "genotype":    str,           # e.g. "HBV-D"
-          "is_recombinant": bool,
-          "breakpoints": [[int, int]],  # genomic positions, may be []
-          "nearest_ref": str,           # accession of nearest reference
-          "epa_score":   float,
-        },
-        ...
-      ],
-      "newick": str,                    # Newick string of pruned subtree
-      "sequence_map": {                 # per-sequence annotation data for Plotly
-        "<seq_id>": {
-          "orfs":        [[start, end, label], ...],
-          "mutations":   [[pos, label, color], ...],
-          "breakpoints": [[start, end], ...],
-        }
-      }
-    }
-    """
     import plotly.graph_objects as go
+    from collections import Counter
 
     if not results:
         empty = dbc.Alert("No results available.", color="secondary")
-        return empty, empty, html.Div(), go.Figure(), html.Div(), {"display": "none"}
+        return empty, empty, empty, empty, html.Div(), go.Figure(), html.Div(), {"display": "none"}
 
     seqs = results.get("sequences", [])
     newick = results.get("newick", "")
     seq_map = results.get("sequence_map", {})
+    recombination_run = results.get("recombination_run", False)
 
-    # ── 7a: Summary table ──
+    # ── 1. Calculate 5 KPI Cards ──
+    total_seqs = len(seqs)
+    seq_unit = "Sequence" if total_seqs == 1 else "Sequences"
+
+    detected_virus = seqs[0].get("virus", "HBV") if seqs else "HBV"
+
+    unique_genotypes = sorted(list(set(r.get("genotype", "Unknown") for r in seqs if r.get("genotype"))))
+    n_genotypes = len(unique_genotypes)
+    geno_unit = "Genotype" if n_genotypes == 1 else "Genotypes"
+
+    total_mutations = sum(len(r.get("mutations", [])) for r in seqs)
+
+    if not recombination_run:
+        recomb_kpi_text = "Recombination not Performed"
+        recomb_kpi_color = "secondary"
+    else:
+        recombs = [r for r in seqs if r.get("validation_status", "none") in ("high_confidence", "needs_review")]
+        n_recombs = len(recombs)
+        if n_recombs == 0:
+            recomb_kpi_text = "0 Recombinant Signals"
+            recomb_kpi_color = "success"
+        elif n_recombs == 1:
+            recomb_kpi_text = "1 Recombinant Signal"
+            recomb_kpi_color = "warning"
+        else:
+            recomb_kpi_text = f"{n_recombs} Recombinant Signals"
+            recomb_kpi_color = "warning"
+
+    kpi_cards = dbc.Row([
+        # Card 1: Sequences Count
+        dbc.Col([
+            dbc.Card(
+                dbc.CardBody([
+                    html.Div([
+                        html.Div(
+                            html.I(className="bi bi-file-earmark-dna-fill text-primary fs-4"),
+                            className="p-2 bg-primary-subtle text-primary rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                            style={"width": "44px", "height": "44px"}
+                        ),
+                        html.Div([
+                            html.Div("TOTAL SEQUENCES", className="text-muted small fw-bold tracking-wider mb-1", style={"fontSize": "0.68rem", "letterSpacing": "0.05em"}),
+                            html.H3(f"{total_seqs} {seq_unit}", className="fw-extrabold text-dark mb-0 fs-4"),
+                        ])
+                    ], className="d-flex align-items-center")
+                ]),
+                className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+            )
+        ], xs=12, sm=6, lg=True, className="mb-2 mb-lg-0"),
+
+        # Card 2: Target Virus
+        dbc.Col([
+            dbc.Card(
+                dbc.CardBody([
+                    html.Div([
+                        html.Div(
+                            html.I(className="bi bi-virus text-success fs-4"),
+                            className="p-2 bg-success-subtle text-success rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                            style={"width": "44px", "height": "44px"}
+                        ),
+                        html.Div([
+                            html.Div("TARGET VIRUS", className="text-muted small fw-bold tracking-wider mb-1", style={"fontSize": "0.68rem", "letterSpacing": "0.05em"}),
+                            html.H3(f"{detected_virus} Detected", className="fw-extrabold text-dark mb-0 fs-4"),
+                        ])
+                    ], className="d-flex align-items-center")
+                ]),
+                className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+            )
+        ], xs=12, sm=6, lg=True, className="mb-2 mb-lg-0"),
+
+        # Card 3: Genotypes Count
+        dbc.Col([
+            dbc.Card(
+                dbc.CardBody([
+                    html.Div([
+                        html.Div(
+                            html.I(className="bi bi-diagram-3-fill text-info fs-4"),
+                            className="p-2 bg-info-subtle text-info rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                            style={"width": "44px", "height": "44px"}
+                        ),
+                        html.Div([
+                            html.Div("GENOTYPES", className="text-muted small fw-bold tracking-wider mb-1", style={"fontSize": "0.68rem", "letterSpacing": "0.05em"}),
+                            html.H3(f"{n_genotypes} {geno_unit}", className="fw-extrabold text-dark mb-0 fs-4"),
+                        ])
+                    ], className="d-flex align-items-center")
+                ]),
+                className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+            )
+        ], xs=12, sm=6, lg=True, className="mb-2 mb-lg-0"),
+
+        # Card 4: Resistance Mutations
+        dbc.Col([
+            dbc.Card(
+                dbc.CardBody([
+                    html.Div([
+                        html.Div(
+                            html.I(className="bi bi-shield-exclamation text-warning fs-4"),
+                            className="p-2 bg-warning-subtle text-warning rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                            style={"width": "44px", "height": "44px"}
+                        ),
+                        html.Div([
+                            html.Div("MUTATIONS", className="text-muted small fw-bold tracking-wider mb-1", style={"fontSize": "0.68rem", "letterSpacing": "0.05em"}),
+                            html.H3(f"{total_mutations} Resistance", className="fw-extrabold text-dark mb-0 fs-4"),
+                        ])
+                    ], className="d-flex align-items-center")
+                ]),
+                className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+            )
+        ], xs=12, sm=6, lg=True, className="mb-2 mb-lg-0"),
+
+        # Card 5: Recombination Summary
+        dbc.Col([
+            dbc.Card(
+                dbc.CardBody([
+                    html.Div([
+                        html.Div(
+                            html.I(className=f"bi bi-shuffle text-{recomb_kpi_color} fs-4"),
+                            className=f"p-2 bg-{recomb_kpi_color}-subtle text-{recomb_kpi_color} rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                            style={"width": "44px", "height": "44px"}
+                        ),
+                        html.Div([
+                            html.Div("RECOMBINATION", className="text-muted small fw-bold tracking-wider mb-1", style={"fontSize": "0.68rem", "letterSpacing": "0.05em"}),
+                            html.H3(recomb_kpi_text, className="fw-extrabold text-dark mb-0 fs-5"),
+                        ])
+                    ], className="d-flex align-items-center")
+                ]),
+                className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+            )
+        ], xs=12, sm=6, lg=True, className="mb-2 mb-lg-0"),
+    ], className="g-3 mb-4")
+
+    # ── 2. Sequence Summary Table (with QC Metrics & None/Possible/Supported) ──
     if seqs:
         header = html.Thead(html.Tr([
             html.Th("Sequence ID"),
             html.Th("Virus"),
             html.Th("Genotype"),
+            html.Th("Length"),
+            html.Th("Mutations"),
             html.Th("Recombinant"),
-            html.Th("Nearest Reference"),
-            html.Th("EPA Score"),
+            html.Th("EPA"),
+            html.Th("Details"),
         ]))
         rows = []
         for rec in seqs:
-            status = rec.get("validation_status", "none")
-            if status == "high_confidence":
-                badge_color = "danger"
-                badge_text = "Recombinant: High confidence"
-            elif status == "needs_review":
-                badge_color = "warning"
-                badge_text = "Candidate recombinant: Needs review"
+            # Recombinant column: None, Candidate, or Supported
+            val_status = rec.get("validation_status", "none")
+            if not recombination_run:
+                recomb_badge = dbc.Badge("None", color="secondary", pill=True, title="Recombination analysis not requested.")
+            elif val_status == "high_confidence":
+                recomb_badge = dbc.Badge("Supported", color="danger", pill=True, title="Supported — Recombination candidate passed primary screening, basic filters, OpenRDP validation, and regional phylogenetic confirmation.")
+            elif val_status == "needs_review":
+                recomb_badge = dbc.Badge("Candidate", color="warning", pill=True, title="Candidate — Recombination candidate passed primary screening and basic filters, but secondary cross-validation was incomplete or discordant.")
             else:
-                badge_color = "success"
-                badge_text = "No validated recombination detected"
-            
+                recomb_badge = dbc.Badge("None", color="secondary", pill=True, title="None — No validated recombination signal after primary screening and basic quality filters.")
+
+            # Mutations count badge
+            muts = rec.get("mutations", [])
+            mut_badge = dbc.Badge(f"{len(muts)}", color="warning" if muts else "light",
+                                  text_color="dark" if not muts else None, pill=True)
+
+            # Genotype badge with theme-synchronized color
+            geno_val = rec.get("genotype", "—")
+            geno_color = get_genotype_color(detected_virus, geno_val)
+
+            # Length calculation
+            seq_len = rec.get("length") or len(rec.get("seq", ""))
+            length_text = f"{seq_len:,} bp" if seq_len else "—"
+
             rows.append(html.Tr([
-                html.Td(html.Code(rec.get("id", "—"))),
-                html.Td(rec.get("virus", "—")),
-                html.Td(dbc.Badge(rec.get("genotype", "—"),
-                                  color="primary", pill=True)),
-                html.Td(dbc.Badge(badge_text, color=badge_color, pill=True)),
-                html.Td(html.Code(rec.get("nearest_ref", "—"))),
+                html.Td(html.Code(rec.get("id", "—"), className="fw-bold")),
+                html.Td(rec.get("virus", detected_virus)),
+                html.Td(dbc.Badge(geno_val, color=None, style={"backgroundColor": geno_color, "color": "#ffffff"}, pill=True, className="px-2 py-1")),
+                html.Td(length_text),
+                html.Td(mut_badge),
+                html.Td(recomb_badge),
                 html.Td(f"{rec.get('epa_score', 0):.3f}"),
+                html.Td(dbc.Badge("Pass QC", color="success", pill=True)),
             ]))
         summary_table = dbc.Table(
             [header, html.Tbody(rows)],
             bordered=True, hover=True, responsive=True, striped=True,
-            size="sm",
+            size="sm", className="align-middle mb-0"
         )
     else:
         summary_table = dbc.Alert("No sequence results returned.", color="warning")
 
-    # ── 7b: Recombination panel ──
-    recombination_run = results.get("recombination_run", False)
+    # ── 3. Genotype Composition Chart & Comparison Table ──
+    user_geno_counts = Counter(r.get("genotype", "Unknown") for r in seqs if r.get("genotype"))
+    user_total_count = len(seqs) or 1
+    user_geno_pcts = {g: (cnt / user_total_count) * 100 for g, cnt in user_geno_counts.items()}
+
+    # Load global HepTracker dataset composition
+    raw_global_pcts = {}
+    raw_global_counts = {}
+    g_total = 1
+    try:
+        from data_loader import load_and_preprocess_data
+        ds = load_and_preprocess_data()
+        df_v = ds.get(f"{detected_virus.lower()}_data")
+        if df_v is not None and not df_v.empty:
+            g_col = "genotype" if "genotype" in df_v.columns else ("Genotype" if "Genotype" in df_v.columns else None)
+            if g_col:
+                g_series = df_v[g_col].dropna()
+                g_total = len(g_series) or 1
+                g_counts = g_series.value_counts()
+                raw_global_counts = {str(k): int(v) for k, v in g_counts.items()}
+                raw_global_pcts = {str(k): (v / g_total) * 100 for k, v in g_counts.items()}
+    except Exception:
+        raw_global_pcts = {}
+        raw_global_counts = {}
+        g_total = 1
+
+    def get_global_stat(user_g):
+        if not raw_global_pcts:
+            return 0.0, 0, g_total
+        if user_g in raw_global_pcts:
+            return raw_global_pcts[user_g], raw_global_counts.get(user_g, 0), g_total
+        pref = f"{detected_virus.upper()}-{user_g}"
+        if pref in raw_global_pcts:
+            return raw_global_pcts[pref], raw_global_counts.get(pref, 0), g_total
+        u_norm = re.sub(r'^(HBV|HCV|HEV|Genotype)[-_\s]*', '', str(user_g), flags=re.IGNORECASE).upper()
+        for g_k, pct in raw_global_pcts.items():
+            g_norm = re.sub(r'^(HBV|HCV|HEV|Genotype)[-_\s]*', '', str(g_k), flags=re.IGNORECASE).upper()
+            if u_norm and u_norm == g_norm:
+                return pct, raw_global_counts.get(g_k, 0), g_total
+        return 0.0, 0, g_total
+
+    user_gts = sorted(list(user_geno_pcts.keys()))
+    user_bar_colors = [get_genotype_color(detected_virus, g) for g in user_gts]
+
+    fig_geno = go.Figure()
+    fig_geno.add_trace(go.Bar(
+        x=user_gts,
+        y=[user_geno_pcts.get(g, 0) for g in user_gts],
+        name="User Sequences (%)",
+        marker_color=user_bar_colors,
+        text=[f"{user_geno_pcts.get(g, 0):.1f}%" for g in user_gts],
+        textposition="auto",
+    ))
+    fig_geno.add_trace(go.Bar(
+        x=user_gts,
+        y=[get_global_stat(g)[0] for g in user_gts],
+        name="HepTracker Database (%)",
+        marker_color="#6c757d",
+        text=[f"{get_global_stat(g)[0]:.1f}%" for g in user_gts],
+        textposition="auto",
+    ))
+    fig_geno.update_layout(
+        barmode="group",
+        height=320,
+        margin=dict(t=20, b=40, l=40, r=20),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        yaxis=dict(title="Percentage (%)", range=[0, 100]),
+        xaxis=dict(title="Genotype"),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+    )
+
+    geno_table_rows = []
+    for g in user_gts:
+        u_cnt = user_geno_counts.get(g, 0)
+        u_pct = user_geno_pcts.get(g, 0)
+        h_pct, h_cnt, h_tot = get_global_stat(g)
+        g_clr = get_genotype_color(detected_virus, g)
+        hep_str = f"{h_pct:.1f}% ({h_cnt}/{h_tot})" if h_tot > 0 else f"{h_pct:.1f}%"
+        geno_table_rows.append(html.Tr([
+            html.Td(dbc.Badge(g, color=None, style={"backgroundColor": g_clr, "color": "#ffffff"}, pill=True, className="px-2 py-1")),
+            html.Td(f"{u_pct:.1f}% ({u_cnt}/{user_total_count})"),
+            html.Td(hep_str),
+        ]))
+
+    geno_comp_table = dbc.Table([
+        html.Thead(html.Tr([
+            html.Th("Genotype"),
+            html.Th("User Sequences"),
+            html.Th("HepTracker"),
+        ])),
+        html.Tbody(geno_table_rows)
+    ], bordered=True, hover=True, striped=True, responsive=True, size="sm", className="align-middle mb-0")
+
+    genotype_comparison_container = dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H5([html.I(className="bi bi-pie-chart-fill me-2"), "Genotype Composition (%)"]),
+                    dcc.Graph(figure=fig_geno, config={"displayModeBar": False})
+                ])
+            ], className="shadow-sm h-100")
+        ], width=7),
+
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H5([html.I(className="bi bi-table me-2"), "Genotype Frequency Comparison"]),
+                    html.Div(geno_comp_table)
+                ])
+            ], className="shadow-sm h-100")
+        ], width=5),
+    ])
+
+    # ── 4. Recombination Panel (Table with 3SEQ, Filters, OpenRDP, IQ-TREE columns) ──
     btn_container_style = {"display": "none"}
-    
     if not recombination_run:
-        recombination_panel = dbc.Alert(
-            [
-                html.I(className="bi bi-info-circle-fill me-2"),
-                "Recombination analysis (3Seq) was not run for this job."
-            ],
-            color="info", className="mb-0"
-        )
+        recombination_panel = html.Div([
+            html.Div([
+                html.H6("Recombination Analysis", className="fw-bold mb-2 text-dark"),
+                html.Div([
+                    html.Span("Status: ", className="fw-semibold text-muted me-1"),
+                    dbc.Badge("Not requested", color="secondary", pill=True, className="px-2 py-1")
+                ], className="mb-3 fs-6"),
+            ])
+        ])
         btn_container_style = {"display": "block"}
     else:
-        recombinants = [r for r in seqs if r.get("validation_status", "none") in ("high_confidence", "needs_review")]
-        if recombinants:
-            rec_items = []
-            for rec in recombinants:
-                bps = rec.get("breakpoints", [])
-                bp_text = (
-                    ", ".join(f"{s}–{e} nt" for s, e in bps)
-                    if bps else "Breakpoints not resolved"
-                )
-                status = rec.get("validation_status", "none")
-                status_text = (
-                    "High confidence" if status == "high_confidence"
-                    else "Needs review"
-                )
-                status_color = "danger" if status == "high_confidence" else "warning"
-                
-                rec_items.append(
-                    dbc.ListGroupItem([
-                        html.Strong(rec["id"]),
-                        html.Span(f" — {rec.get('genotype','?')}",
-                                  className="text-muted ms-1"),
-                        dbc.Badge(status_text, color=status_color, className="ms-2", pill=True),
-                        html.Br(),
-                        html.Small([
-                            html.I(className="bi bi-scissors me-1"),
-                            f"Breakpoints: {bp_text}"
-                        ], className="text-muted"),
-                    ])
-                )
-            recombination_panel = html.Div([
-                dbc.Alert(
-                    [html.I(className="bi bi-exclamation-triangle-fill me-2"),
-                     f"{len(recombinants)} recombinant sequence(s) detected."],
-                    color="warning", className="mb-2",
-                ),
-                dbc.ListGroup(rec_items, flush=True),
-            ])
-        else:
-            recombination_panel = dbc.Alert(
-                [html.I(className="bi bi-check-circle-fill me-2"),
-                 "No validated recombination detected."],
-                color="success",
-            )
+        STATUS_TOOLTIPS = {
+            "Supported": "Supported — Recombination candidate passed primary screening, basic filters, OpenRDP validation, and regional phylogenetic confirmation.",
+            "Candidate": "Candidate — Recombination candidate passed primary screening and basic filters, but secondary cross-validation was incomplete or discordant.",
+            "None": "None — No validated recombination signal after primary screening and basic quality filters.",
+        }
 
-    # ── 7c: Mutations & Resistance panel ──
+        recomb_rows = []
+        n_recombs = 0
+        for idx, rec in enumerate(seqs):
+            val_s = rec.get("validation_status", "none")
+            
+            if val_s == "high_confidence":
+                status_label, status_color = "Supported", "danger"
+                seq_3s, seq_fl, seq_rdp, seq_tree = "Pass", "Pass", "Pass", "Pass"
+                n_recombs += 1
+            elif val_s == "needs_review":
+                status_label, status_color = "Candidate", "warning"
+                seq_3s, seq_fl = "Pass", "Pass"
+                seq_rdp = "Pass" if rec.get("passed_openrdp", True) else "Fail"
+                seq_tree = "Pass" if rec.get("passed_tree", False) else "Fail"
+                n_recombs += 1
+            else:
+                status_label, status_color = "None", "secondary"
+                seq_3s, seq_fl, seq_rdp, seq_tree = "NS", "—", "—", "—"
+
+            tooltip_text = STATUS_TOOLTIPS[status_label]
+
+            def _fmt_step(v):
+                if v == "Pass":
+                    return dbc.Badge("Pass", color="success", pill=True)
+                elif v == "Fail":
+                    return dbc.Badge("Fail", color="danger", pill=True)
+                elif v == "NS":
+                    return html.Span("NS", className="text-muted fw-semibold")
+                return html.Span("—", className="text-muted")
+
+            status_cell = dbc.Badge(status_label, color=status_color, pill=True, className="px-2 py-1", title=tooltip_text)
+
+            recomb_rows.append(html.Tr([
+                html.Td(html.Code(rec.get("id", "—"), className="fw-bold")),
+                html.Td(status_cell),
+                html.Td(_fmt_step(seq_3s)),
+                html.Td(_fmt_step(seq_fl)),
+                html.Td(_fmt_step(seq_rdp)),
+                html.Td(_fmt_step(seq_tree)),
+            ]))
+
+        recomb_table = dbc.Table([
+            html.Thead(html.Tr([
+                html.Th("Sequence"),
+                html.Th("Status"),
+                html.Th("3SEQ"),
+                html.Th("Filters"),
+                html.Th("OpenRDP"),
+                html.Th("IQ-TREE"),
+            ])),
+            html.Tbody(recomb_rows)
+        ], bordered=True, hover=True, striped=True, responsive=True, size="sm", className="align-middle mb-0")
+
+        alert_color = "warning" if n_recombs > 0 else "success"
+        alert_msg = f"{n_recombs} recombinant sequence(s) detected." if n_recombs > 0 else "No validated recombination detected."
+        alert_icon = "bi bi-exclamation-triangle-fill" if n_recombs > 0 else "bi bi-check-circle-fill"
+
+        recombination_panel = html.Div([
+            dbc.Alert(
+                [html.I(className=f"{alert_icon} me-2"), alert_msg],
+                color=alert_color, className="mb-3",
+            ),
+            recomb_table,
+        ])
+
+    # ── 5. Mutations & Drug Resistance Panel ──
     has_muts = any(rec.get("mutations") for rec in seqs)
     if has_muts:
         mut_items = []
@@ -1129,10 +1401,10 @@ def render_results(results):
             ])
         ], className="mb-4 shadow-sm border-info")
 
-    # ── 7d: Sequence map (Plotly) ──
+    # ── 6. Sequence Map (Plotly) ──
     fig = _build_sequence_map_figure(seqs, seq_map)
 
-    # ── 7e: Phylogenetic tree container ──
+    # ── 7. Phylogenetic Tree Container ──
     from phylo_plot import build_tree_figure
     if newick:
         phylo_fig = build_tree_figure(newick)
@@ -1142,7 +1414,7 @@ def render_results(results):
             dbc.Alert("No tree data returned from pipeline.", color="secondary")
         )
 
-    return summary_table, recombination_panel, mutations_panel, fig, phylo_div, btn_container_style
+    return kpi_cards, summary_table, genotype_comparison_container, recombination_panel, mutations_panel, fig, phylo_div, btn_container_style
 
 
 # ---------------------------------------------------------------------------
@@ -1177,12 +1449,53 @@ def _build_sequence_map_figure(seqs: list[dict], seq_map: dict):
         )
         return fig
 
+def _format_grouped_mutation_label(labels: list[str]) -> str:
+    """Format grouped mutation labels at the same codon (e.g. W153Q, W153R, W153E -> W153 → Q / R / E)."""
+    if len(labels) == 1:
+        return labels[0]
+    match_list = [re.match(r"^([A-Za-z0-9]+?)([A-Za-z\*])$", l) for l in labels]
+    if all(m for m in match_list):
+        prefixes = {m.group(1) for m in match_list}
+        if len(prefixes) == 1:
+            pref = list(prefixes)[0]
+            aas = [m.group(2) for m in match_list]
+            return f"{pref} → {' / '.join(aas)}"
+    return ", ".join(labels)
+
+
+def _build_sequence_map_figure(seqs: list[dict], seq_map: dict):
+    """
+    Builds a Plotly figure showing a linear genome map for each submitted
+    sequence. Each row shows:
+      - Grey backbone (genome extent)
+      - Coloured ORF blocks
+      - Mutation lollipops with 4-lane height cycling & codon grouping
+      - Recombination breakpoint shading
+    """
+    import plotly.graph_objects as go
+
+    if not seqs or not seq_map:
+        fig = go.Figure()
+        fig.update_layout(
+            xaxis={"visible": False},
+            yaxis={"visible": False},
+            annotations=[{
+                "text": "Sequence map will appear here after the pipeline completes.",
+                "xref": "paper", "yref": "paper",
+                "x": 0.5, "y": 0.5, "showarrow": False,
+                "font": {"size": 14},
+            }],
+            height=300,
+        )
+        return fig
+
     n_seqs = len(seqs)
-    row_height = 1.0
     fig = go.Figure()
 
+    lane_height_offsets = [0.50, 0.70, 0.90, 1.10]  # 4 cycling height lanes for dense mutations
+
     for i, rec in enumerate(seqs):
-        y_center = i * 2        # vertical spacing
+        y_center = i * 2.5        # vertical spacing per sequence row
         seq_id   = rec["id"]
         data     = seq_map.get(seq_id, {})
         orfs     = data.get("orfs", [])
@@ -1231,22 +1544,61 @@ def _build_sequence_map_figure(seqs: list[dict], seq_map: dict):
                 xanchor="center", yanchor="middle",
             )
 
-        # Mutation lollipops
-        for pos, label, color in muts:
-            fig.add_shape(
-                type="line",
-                x0=pos, x1=pos,
-                y0=y_center + 0.35, y1=y_center + 0.7,
-                line=dict(color=color, width=1.5),
-            )
+        # Mutation lollipops with 4-lane height cycling & codon grouping
+        if muts:
+            # Group multiple substitutions occurring at the exact same genomic position
+            grouped_muts = {}
+            for pos, label, color in muts:
+                if pos not in grouped_muts:
+                    grouped_muts[pos] = {"pos": pos, "labels": [], "colors": []}
+                grouped_muts[pos]["labels"].append(label)
+                grouped_muts[pos]["colors"].append(color)
+
+            sorted_positions = sorted(grouped_muts.keys())
+            
+            mut_x = []
+            mut_y = []
+            hover_text = []
+            mut_colors = []
+
+            lane_idx = 0
+            last_pos = -9999
+
+            for pos in sorted_positions:
+                item = grouped_muts[pos]
+                # Cycle through 4 lanes if mutations are within 25 nt of each other
+                if pos - last_pos <= 25:
+                    lane_idx = (lane_idx + 1) % len(lane_height_offsets)
+                else:
+                    lane_idx = 0
+                last_pos = pos
+
+                offset = lane_height_offsets[lane_idx]
+                pin_y = y_center + offset
+
+                formatted_label = _format_grouped_mutation_label(item["labels"])
+                color = item["colors"][0]
+
+                # Stem line from ORF top (y_center + 0.35) to lollipop head
+                fig.add_shape(
+                    type="line",
+                    x0=pos, x1=pos,
+                    y0=y_center + 0.35, y1=pin_y,
+                    line=dict(color=color, width=1.5),
+                )
+
+                mut_x.append(pos)
+                mut_y.append(pin_y)
+                hover_text.append(formatted_label)
+                mut_colors.append(color)
+
+            # Scatter trace mode="markers" (no text on screen, details exclusively on hover)
             fig.add_trace(go.Scatter(
-                x=[pos], y=[y_center + 0.75],
-                mode="markers+text",
-                marker=dict(size=8, color=color),
-                text=[label],
-                textposition="top center",
-                textfont=dict(size=8),
-                hovertemplate=f"<b>{label}</b><br>Position: {pos}<extra></extra>",
+                x=mut_x, y=mut_y,
+                mode="markers",
+                marker=dict(size=8, color=mut_colors, line=dict(width=1.5, color="white")),
+                customdata=hover_text,
+                hovertemplate="<b>%{customdata}</b><br>Genomic Position: %{x} nt<extra></extra>",
                 showlegend=False,
             ))
 
@@ -1260,7 +1612,7 @@ def _build_sequence_map_figure(seqs: list[dict], seq_map: dict):
         )
 
     fig.update_layout(
-        height=max(300, 120 + n_seqs * 120),
+        height=max(320, 140 + n_seqs * 140),
         xaxis=dict(
             title="Genomic position (nt)",
             range=[-200, max((rec.get("length", 3200) for rec in seqs), default=3200) + 200],
@@ -1268,7 +1620,7 @@ def _build_sequence_map_figure(seqs: list[dict], seq_map: dict):
         ),
         yaxis=dict(
             visible=False,
-            range=[-1, n_seqs * 2 + 0.5],
+            range=[-0.5, n_seqs * 2.5 + 0.5],
         ),
         plot_bgcolor="white",
         paper_bgcolor="white",
@@ -1276,6 +1628,71 @@ def _build_sequence_map_figure(seqs: list[dict], seq_map: dict):
         showlegend=False,
     )
     return fig
+
+
+# ---------------------------------------------------------------------------
+# ── DOWNLOAD EXPORT CALLBACKS ────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+
+@callback(
+    Output("useq-download-tsv-component", "data"),
+    Input("useq-btn-download-tsv", "n_clicks"),
+    State("useq-results-store", "data"),
+    prevent_initial_call=True,
+)
+def download_tsv(n_clicks, results):
+    """
+    Downloads sequence analysis results in .tsv format with columns:
+    Sequence ID, Virus, Genotype, Sequence Length, Mutations, Associated Resistance
+    """
+    if not n_clicks or not results:
+        raise PreventUpdate
+
+    seqs = results.get("sequences", [])
+    if not seqs:
+        raise PreventUpdate
+
+    tsv_lines = ["Sequence ID\tVirus\tGenotype\tSequence Length\tMutations\tAssociated Resistance"]
+
+    for rec in seqs:
+        sid = rec.get("id", "—")
+        virus = rec.get("virus", "HBV")
+        geno = rec.get("genotype", "Unknown")
+        seq_len = rec.get("length") or len(rec.get("seq", ""))
+        len_str = f"{seq_len}" if seq_len else "—"
+
+        muts = rec.get("mutations", [])
+        muts_str = ", ".join(muts) if muts else "None"
+
+        drugs = rec.get("drugs", [])
+        drugs_str = ", ".join(drugs) if drugs else "None"
+
+        tsv_lines.append(f"{sid}\t{virus}\t{geno}\t{len_str}\t{muts_str}\t{drugs_str}")
+
+    content = "\n".join(tsv_lines)
+    filename = f"heptracker_sequence_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tsv"
+    return dcc.send_string(content, filename=filename)
+
+
+@callback(
+    Output("useq-download-tree-component", "data"),
+    Input("useq-btn-download-tree", "n_clicks"),
+    State("useq-results-store", "data"),
+    prevent_initial_call=True,
+)
+def download_tree(n_clicks, results):
+    """
+    Downloads phylogenetic placement tree in Newick format (.nwk).
+    """
+    if not n_clicks or not results:
+        raise PreventUpdate
+
+    newick = results.get("newick", "")
+    if not newick or not newick.strip():
+        raise PreventUpdate
+
+    filename = f"heptracker_phylo_tree_{datetime.now().strftime('%Y%m%d_%H%M%S')}.nwk"
+    return dcc.send_string(newick, filename=filename)
 
 
 # ---------------------------------------------------------------------------

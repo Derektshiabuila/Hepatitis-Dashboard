@@ -249,3 +249,375 @@ h1, h2, h3, h4, h5, h6,
     margin-top: 0.5rem;
 }
 
+/* ==========================================================================
+   HEPATITIS SURVEILLANCE DASHBOARD - LIGHT THEME & RESTRUCTURING STYLES
+   ========================================================================== */
+
+:root {
+    --font-primary: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-heading: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', Consolas, monospace;
+    --color-text: #0F172A;
+    --color-text-light: #64748B;
+    --line-height: 1.5;
+    
+    --bg-light: #F8FAFC;
+    --card-bg: #FFFFFF;
+    --card-border: #E2E8F0;
+    --text-main: #0F172A;
+    --text-muted: #475569;
+    --text-subtle: #64748B;
+    
+    --primary-blue: #2563EB;
+    --primary-blue-hover: #1D4ED8;
+    --virus-hbv: #E11D48;
+    --virus-hcv: #0D9488;
+    --virus-hev: #65A30D;
+    --virus-hav: #D97706;
+    --virus-hdv: #7C3AED;
+    
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-pill: 9999px;
+    
+    --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03);
+    --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.07);
+    --shadow-lg: 0 10px 25px -5px rgba(15, 23, 42, 0.10);
+}
+
+body {
+    font-family: var(--font-primary);
+    color: var(--color-text);
+    line-height: var(--line-height);
+    font-weight: 400;
+    background-color: var(--bg-light);
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Frosted Glass Top Banner Header */
+.hep-overall-header {
+    background: linear-gradient(135deg, rgba(0, 65, 194, 0.95) 0%, rgba(29, 78, 216, 0.92) 100%) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #FFFFFF !important;
+    padding: 0.85rem 1.25rem;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 6px 20px rgba(0, 65, 194, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* KPI Stat Cards Modern Styling */
+.hep-kpi-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.hep-kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+    border-color: #CBD5E1;
+}
+
+.hep-kpi-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--primary-blue);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.hep-kpi-card.hbv::before { background: var(--virus-hbv); }
+.hep-kpi-card.hcv::before { background: var(--virus-hcv); }
+.hep-kpi-card.hev::before { background: var(--virus-hev); }
+.hep-kpi-card.hav::before { background: var(--virus-hav); }
+
+.hep-kpi-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.hep-kpi-title {
+    font-size: 0.775rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-subtle);
+}
+
+.hep-kpi-icon-wrapper {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    background: rgba(37, 99, 235, 0.08);
+    color: var(--primary-blue);
+}
+
+.hep-kpi-card.hbv .hep-kpi-icon-wrapper { background: rgba(225, 29, 72, 0.08); color: var(--virus-hbv); }
+.hep-kpi-card.hcv .hep-kpi-icon-wrapper { background: rgba(13, 148, 136, 0.08); color: var(--virus-hcv); }
+.hep-kpi-card.hev .hep-kpi-icon-wrapper { background: rgba(101, 163, 13, 0.08); color: var(--virus-hev); }
+
+.hep-kpi-value {
+    font-size: 1.85rem;
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-family: var(--font-primary);
+    margin-bottom: 0.4rem;
+}
+
+.hep-kpi-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-subtle);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.hep-kpi-badge {
+    font-size: 0.725rem;
+    font-weight: 700;
+    padding: 0.2rem 0.55rem;
+    border-radius: var(--radius-pill);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.hep-kpi-badge.positive {
+    background: #DCFCE7;
+    color: #15803D;
+}
+
+.hep-kpi-badge.neutral {
+    background: #F1F5F9;
+    color: #475569;
+}
+
+/* Mutation Status Pill Badges */
+.hep-badge-resistance {
+    background: #FFE4E6 !important;
+    color: #E11D48 !important;
+    font-weight: 700 !important;
+    font-size: 0.75rem !important;
+    padding: 0.3rem 0.65rem !important;
+    border-radius: var(--radius-pill) !important;
+    display: inline-block;
+}
+
+.hep-badge-escape {
+    background: #FEF3C7 !important;
+    color: #D97706 !important;
+    font-weight: 700 !important;
+    font-size: 0.75rem !important;
+    padding: 0.3rem 0.65rem !important;
+    border-radius: var(--radius-pill) !important;
+    display: inline-block;
+}
+
+.hep-badge-substitution {
+    background: #DBEAFE !important;
+    color: #2563EB !important;
+    font-weight: 700 !important;
+    font-size: 0.75rem !important;
+    padding: 0.3rem 0.65rem !important;
+    border-radius: var(--radius-pill) !important;
+    display: inline-block;
+}
+
+.hep-badge-neutral {
+    background: #F1F5F9 !important;
+    color: #64748B !important;
+    font-weight: 600 !important;
+    font-size: 0.75rem !important;
+    padding: 0.3rem 0.65rem !important;
+    border-radius: var(--radius-pill) !important;
+    display: inline-block;
+}
+
+/* Header Filter Bar & Wider Logo */
+.hep-filter-bar-card {
+    background: var(--card-bg) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-sm) !important;
+    padding: 1rem 1.25rem !important;
+    margin-bottom: 1.5rem;
+}
+
+.hep-brand-logo-wide {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-right: 1.25rem;
+    border-right: 2px solid var(--card-border);
+    min-width: 280px;
+}
+
+.hep-brand-logo-wide .brand-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+.hep-brand-logo-wide .brand-title {
+    font-weight: 800;
+    font-size: 1.2rem;
+    line-height: 1.1;
+    color: var(--text-main);
+    letter-spacing: -0.01em;
+}
+
+.hep-brand-logo-wide .brand-subtitle {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--primary-blue);
+    text-transform: uppercase;
+}
+
+/* Filter Labels & Dropdowns in Light Mode */
+.hep-filter-label {
+    font-size: 0.725rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-subtle) !important;
+    margin-bottom: 0.35rem !important;
+}
+
+/* Reset Button */
+.btn-reset-filters {
+    background-color: #F1F5F9 !important;
+    color: #475569 !important;
+    border: 1px solid #CBD5E1 !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+    border-radius: 8px !important;
+    padding: 0.45rem 0.9rem !important;
+    transition: all 0.2s ease !important;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.btn-reset-filters:hover {
+    background-color: #E2E8F0 !important;
+    color: #0F172A !important;
+    border-color: #94A3B8 !important;
+}
+
+/* Vertical Block for Region Summary */
+.hep-region-block {
+    background: var(--card-bg) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-sm) !important;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.hep-region-block .card-header-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0;
+}
+
+/* Map Mode Selector Above Map */
+.hep-map-mode-bar {
+    background: #F1F5F9;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 0.4rem 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* Section Selector Tabs */
+.hep-section-selector-container {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    padding: 0.5rem 0.75rem;
+    box-shadow: var(--shadow-sm);
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* General Light Theme Cards */
+
+/* General Light Theme Cards */
+.card {
+    background-color: var(--card-bg) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-sm) !important;
+    color: var(--text-main) !important;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-md) !important;
+}
+
+.text-white {
+    color: var(--text-main) !important;
+}
+
+.bg-dark {
+    background-color: var(--card-bg) !important;
+    color: var(--text-main) !important;
+}
+
+/* Select/Dropdown styling overrides for light mode */
+.Select-control, .dash-dropdown .Select-control {
+    background-color: #FFFFFF !important;
+    border-color: #CBD5E1 !important;
+    color: #0F172A !important;
+}
+
+.Select-menu-outer {
+    background-color: #FFFFFF !important;
+    border-color: #CBD5E1 !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+}
+
+.Select-value-label, .Select-option {
+    color: #0F172A !important;
+}
+
+

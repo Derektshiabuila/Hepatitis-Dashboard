@@ -25,9 +25,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Miniconda
+# Install Miniconda (architecture-aware)
 ENV CONDA_DIR=/opt/conda
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then MINICONDA_ARCH="aarch64"; else MINICONDA_ARCH="x86_64"; fi && \
+    wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-${MINICONDA_ARCH}.sh -O /tmp/miniconda.sh && \
     /bin/bash /tmp/miniconda.sh -b -p $CONDA_DIR && \
     rm /tmp/miniconda.sh
 
@@ -56,7 +58,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 ENV WINEPREFIX=/root/.wine
 ENV WINEDEBUG=-all
 ENV WINEDLLOVERRIDES="mscoree,mshtml,winhttp=d"
-RUN wineboot --init
+RUN wineboot --init || true
 
 # Attempt to download and silent-install RDP5 inside Wine
 # Falls back gracefully to the pre-loaded scripts/RDP5CL.exe if UCT servers are unreachable

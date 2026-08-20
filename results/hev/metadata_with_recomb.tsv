@@ -1,0 +1,590 @@
+sample	virus	genotype	subgenotype	gene	drug	mutation	detected	type	is_recombinant	breakpoint_start	breakpoint_end	p_value	methods	parent_1	parent_2
+MN614141.1	HEV	AL_3	AL_3c					genotype	false						
+PQ557135.1	HEV	AL_3	AL_3ra					genotype	false						
+JQ013792.1	HEV	AL_3	AL_3ra					genotype	false						
+MW355335.1	HEV	AL_3	AL_3c					genotype	false						
+MW355361.1	HEV	AL_3	AL_3f					genotype	false						
+MF444067.1	HEV	AL_3	AL_3f					genotype	false						
+PV089664.1	HEV	AL_3						genotype	false						
+KC166968.1	HEV	AL_3	AL_3f					genotype	false						
+MW355307.1	HEV	AL_3	AL_3h					genotype	false						
+MF444032.1	HEV	AL_3	AL_3f					genotype	false						
+MW355357.1	HEV	AL_3	AL_3c					genotype	false						
+MW355300.1	HEV	AL_3	AL_3c					genotype	false						
+PQ206572.1	HEV	AL_4	AL_4d					genotype	false						
+KT818608.1	HEV	AL_7	AL_7_KJ496144					genotype	false						
+MH377725.1	HEV	AL_3	AL_3_EU360977					genotype	false						
+MF444054.1	HEV	AL_3	AL_3f					genotype	false						
+MN646694.1	HEV	AL_3						genotype	false						
+MF444123.1	HEV	AL_3	AL_3f					genotype	false						
+HQ709170.1	HEV	AL_3	AL_3a					genotype	false						
+MW355319.1	HEV	AL_3						genotype	false						
+MF444044.1	HEV	AL_3	AL_3c					genotype	false						
+MW355336.1	HEV	AL_3	AL_3f					genotype	false						
+MW355302.1	HEV	AL_3	AL_3h					genotype	false						
+MF444099.1	HEV	AL_3	AL_3ra					genotype	false						
+PX724179.1	HEV							genotype	false						
+MF444040.1	HEV	AL_3	AL_3f					genotype	false						
+PX400206.1	HEV							genotype	false						
+MW355317.1	HEV	AL_3	AL_3i					genotype	false						
+KC692453.1	HEV	AL_4	AL_4a					genotype	false						
+PX724178.1	HEV							genotype	false						
+MW355365.1	HEV	AL_3	AL_3c					genotype	false						
+MW355323.1	HEV	AL_3	AL_3c					genotype	false						
+MF480297.1	HEV	AL_3						genotype	false						
+MF444086.1	HEV	AL_3	AL_3e					genotype	false						
+MH184580.1	HEV	AL_3	AL_3e					genotype	false						
+MF444048.1	HEV	AL_3	AL_3f					genotype	false						
+MF444091.1	HEV	AL_3	AL_3f					genotype	false						
+MK192406.1	HEV							genotype	false						
+HQ389543.1	HEV	AL_3	AL_3a					genotype	false						
+MW355353.1	HEV	AL_3	AL_3f					genotype	false						
+DQ459342.1	HEV	AL_1	AL_1a					genotype	false						
+MH504156.1	HEV	AL_1	AL_1a					genotype	false						
+MK192409.1	HEV							genotype	false						
+GU206559.1	HEV	AL_4	AL_4d					genotype	false						
+MW355256.1	HEV	AL_3	AL_3c					genotype	false						
+MW355376.1	HEV	AL_3	AL_3f					genotype	false						
+MW355354.1	HEV	AL_3	AL_3f					genotype	false						
+MF444035.1	HEV	AL_3	AL_3f					genotype	false						
+KY436505.1	HEV	AL_1	AL_1a					genotype	false						
+MH504140.1	HEV	AL_3	AL_3e					genotype	false						
+MF444142.1	HEV	AL_3	AL_3f					genotype	false						
+KU176129.1	HEV	AL_3	AL_3c					genotype	false						
+MF444070.1	HEV	AL_3	AL_3f					genotype	false						
+MW355295.1	HEV	AL_3	AL_3c					genotype	false						
+PQ878621.1	HEV	AL_3	AL_3c					genotype	false						
+KR872416.1	HEV	AL_4	AL_4h					genotype	false						
+MF567575.1	HEV	AL_4	AL_4a					genotype	false						
+MW355276.1	HEV	AL_3	AL_3f					genotype	false						
+MF444033.1	HEV	AL_3	AL_3f					genotype	false						
+MW355345.1	HEV	AL_3	AL_3c					genotype	false						
+MG783569.1	HEV	AL_3	AL_3c					genotype	false						
+JQ953666.1	HEV	AL_3	AL_3f					genotype	false						
+MF444045.1	HEV	AL_3	AL_3f					genotype	false						
+KC163335.1	HEV	AL_4	AL_4d					genotype	false						
+MH504148.1	HEV	AL_3	AL_3e					genotype	false						
+MF444136.1	HEV	AL_3	AL_3h					genotype	false						
+MH184582.1	HEV	AL_3	AL_3e					genotype	false						
+MF444134.1	HEV	AL_3	AL_3f					genotype	false						
+MW355267.1	HEV	AL_3	AL_3c					genotype	false						
+MW355382.1	HEV	AL_3						genotype	false						
+MW355242.1	HEV	AL_3	AL_3f					genotype	false						
+MH377721.1	HEV	AL_3	AL_3i					genotype	false						
+MF444079.1	HEV	AL_3	AL_3f					genotype	false						
+MW355227.1	HEV	AL_3	AL_3f					genotype	false						
+MN646690.1	HEV	AL_3	AL_3c					genotype	false						
+MH504138.1	HEV	AL_3	AL_3c					genotype	false						
+JQ026407.1	HEV	AL_3	AL_3e					genotype	false						
+MW355286.1	HEV	AL_3	AL_3c					genotype	false						
+MW355254.1	HEV	AL_3	AL_3f					genotype	false						
+MW355309.1	HEV	AL_3	AL_3c					genotype	false						
+PV089668.1	HEV	AL_3						genotype	false						
+JN564006.1	HEV	AL_3	AL_3a					genotype	false						
+MF444094.1	HEV	AL_3	AL_3f					genotype	false						
+MH504147.1	HEV	AL_3						genotype	false						
+MW355389.1	HEV	AL_3	AL_3f					genotype	false						
+HQ389544.1	HEV	AL_3	AL_3a					genotype	false						
+MF444028.1	HEV	AL_3	AL_3f					genotype	false						
+MF444111.1	HEV	AL_3	AL_3c					genotype	false						
+JN837481.1	HEV	AL_3	AL_3a					genotype	false						
+MF444108.1	HEV	AL_3	AL_3f					genotype	true	261	8329	0.000000000000	3Seq	ref_EU723513	ref_AB369687
+MF444113.1	HEV	AL_3	AL_3f					genotype	false						
+MN646692.1	HEV	AL_3	AL_3f					genotype	false						
+MH504135.1	HEV	AL_3	AL_3c					genotype	false						
+MW355393.1	HEV	AL_3	AL_3f					genotype	false						
+PQ160053.1	HEV	AL_1	AL_1e					genotype	false						
+MW355258.1	HEV	AL_3	AL_3f					genotype	false						
+MH504137.1	HEV	AL_3	AL_3c					genotype	false						
+KY496200.1	HEV	AL_3	AL_3ra					genotype	false						
+MF444133.1	HEV	AL_3	AL_3f					genotype	false						
+MW355310.1	HEV	AL_3	AL_3f					genotype	false						
+MH504158.1	HEV	AL_1	AL_1a					genotype	false						
+MW355283.1	HEV	AL_3	AL_3c					genotype	false						
+MW355364.1	HEV	AL_3	AL_3c					genotype	false						
+MG783570.1	HEV	AL_3	AL_3c					genotype	false						
+MF444049.1	HEV	AL_3	AL_3c					genotype	false						
+KU670940.1	HEV							genotype	false						
+MW355271.1	HEV	AL_3	AL_3c					genotype	false						
+KT447527.1	HEV	AL_3						genotype	false						
+MF346772.1	HEV	AL_3						genotype	false						
+MW355308.1	HEV	AL_3	AL_3f					genotype	false						
+MH504136.1	HEV	AL_3	AL_3c					genotype	false						
+MW355291.1	HEV	AL_3	AL_3f					genotype	false						
+PX724176.1	HEV							genotype	false						
+PQ557136.1	HEV	AL_3	AL_3ra					genotype	false						
+JQ013793.1	HEV	AL_3	AL_3ra					genotype	false						
+MF480298.1	HEV	AL_3						genotype	false						
+MW355396.1	HEV	AL_3	AL_3f					genotype	false						
+MH450024.1	HEV	AL_3	AL_3f					genotype	false						
+MH450027.1	HEV	AL_3	AL_3f					genotype	false						
+MH504150.1	HEV	AL_3	AL_3e					genotype	false						
+MW355366.1	HEV	AL_3						genotype	false						
+MW837255.1	HEV	AL_3	AL_3c					genotype	false						
+MW355388.1	HEV	AL_3	AL_3f					genotype	false						
+MW355369.1	HEV	AL_3						genotype	false						
+MK390971.1	HEV	AL_3						genotype	false						
+MT362711.1	HEV	AL_3	AL_3c					genotype	false						
+KJ013414.1	HEV	AL_3	AL_3ra					genotype	false						
+KU356186.1	HEV	AL_4	AL_4h					genotype	false						
+JQ679013.1	HEV	AL_3	AL_3a					genotype	false						
+PQ160058.1	HEV	AL_1	AL_1e					genotype	false						
+MF444145.1	HEV	AL_3	AL_3h					genotype	false						
+MW355367.1	HEV	AL_3	AL_3c					genotype	false						
+MH504130.1	HEV	AL_3	AL_3a					genotype	false						
+MW355230.1	HEV	AL_3	AL_3f					genotype	false						
+MH504159.1	HEV	AL_1	AL_1a					genotype	false						
+MW355371.1	HEV	AL_3	AL_3f					genotype	false						
+MF346773.1	HEV	AL_3						genotype	false						
+MN646696.1	HEV	AL_3	AL_3f					genotype	false						
+MF444118.1	HEV	AL_3	AL_3f					genotype	false						
+KU176131.1	HEV	AL_3	AL_3h					genotype	false						
+PQ160049.1	HEV	AL_1	AL_1e					genotype	true	6136	6333	0.000002094844	3Seq	ref_FJ457024	ref_AB369688
+MF444081.1	HEV	AL_3	AL_3f					genotype	false						
+MW355224.1	HEV	AL_3	AL_3c					genotype	false						
+MW002523.1	HEV	AL_3	AL_3ra					genotype	false						
+MW355403.1	HEV	AL_3	AL_3e					genotype	false						
+MN629976.1	HEV	AL_3	AL_3c					genotype	false						
+MW355250.1	HEV	AL_3	AL_3f					genotype	false						
+MF444088.1	HEV	AL_3	AL_3f					genotype	false						
+MW355231.1	HEV	AL_3	AL_3c					genotype	false						
+PP475173.1	HEV	AL_4	AL_4b					genotype	false						
+MF444072.1	HEV	AL_3	AL_3c					genotype	false						
+MW355240.1	HEV	AL_3	AL_3f					genotype	false						
+MF444115.1	HEV	AL_3	AL_3c					genotype	false						
+JF915746.1	HEV	AL_4	AL_4i					genotype	false						
+KU513561.1	HEV	AL_3						genotype	false						
+MH504144.1	HEV	AL_3	AL_3e					genotype	false						
+KF303502.2	HEV	AL_3	AL_3a					genotype	false						
+KY436898.1	HEV	AL_3	AL_3ra					genotype	false						
+MK192408.1	HEV							genotype	false						
+MH450030.1	HEV	AL_3	AL_3f					genotype	false						
+MF444085.1	HEV	AL_3	AL_3c					genotype	false						
+MF444114.1	HEV	AL_3	AL_3c					genotype	false						
+KU356189.1	HEV	AL_4	AL_4h					genotype	false						
+MF444100.1	HEV	AL_3	AL_3f					genotype	false						
+JQ679014.1	HEV	AL_3	AL_3a					genotype	false						
+MH504125.1	HEV	AL_3	AL_3c					genotype	false						
+MW355333.1	HEV	AL_3	AL_3f					genotype	false						
+MF444112.1	HEV	AL_3	AL_3f					genotype	false						
+KC166967.1	HEV	AL_3	AL_3f					genotype	false						
+MH504162.1	HEV	AL_1	AL_1f					genotype	false						
+MF444141.1	HEV	AL_3	AL_3e					genotype	false						
+MF444053.1	HEV	AL_3	AL_3f					genotype	false						
+MW835253.1	HEV	AL_7	AL_7a					genotype	false						
+MW355386.1	HEV	AL_3	AL_3c					genotype	false						
+MF444125.1	HEV	AL_3	AL_3f					genotype	false						
+MH377727.1	HEV	AL_3	AL_3c					genotype	false						
+MW355322.1	HEV	AL_3	AL_3f					genotype	false						
+MF444101.1	HEV	AL_3	AL_3f					genotype	false						
+MW355385.1	HEV	AL_3	AL_3c					genotype	false						
+MF444080.1	HEV	AL_3						genotype	false						
+MH184583.1	HEV	AL_3	AL_3e					genotype	false						
+MW355404.1	HEV	AL_3						genotype	false						
+JX121233.1	HEV	AL_3	AL_3ra					genotype	false						
+KY232313.1	HEV	AL_3	AL_3f					genotype	false						
+MW355284.1	HEV	AL_3	AL_3c					genotype	false						
+MF444129.1	HEV	AL_3	AL_3f					genotype	false						
+MH410174.1	HEV							genotype	false						
+MW355326.1	HEV	AL_3	AL_3f					genotype	false						
+MW355316.1	HEV	AL_3	AL_3c					genotype	false						
+PP982543.1	HEV	AL_3	AL_3c					genotype	false						
+MH504133.1	HEV	AL_3	AL_3c					genotype	false						
+MH504129.1	HEV	AL_3	AL_3c					genotype	false						
+MH450031.1	HEV	AL_3	AL_3f					genotype	false						
+KP294371.1	HEV	AL_3						genotype	false						
+PV605258.1	HEV							genotype	false						
+MH377726.1	HEV	AL_3	AL_3f					genotype	false						
+MT840367.1	HEV	AL_3	AL_3e					genotype	false						
+MW355338.1	HEV	AL_3	AL_3c					genotype	false						
+MW355351.1	HEV	AL_3	AL_3f					genotype	false						
+MH184579.1	HEV	AL_3	AL_3e					genotype	false						
+MN646693.1	HEV	AL_3	AL_3f					genotype	true	8429	10352	0.000000084716	3Seq	ref_AB369687	ref_EU723513
+MF444093.1	HEV	AL_3	AL_3f					genotype	true	261	8429	0.000000069426	3Seq	ref_EU723513	ref_AB369687
+KY929403.1	HEV	AL_4	AL_4h					genotype	false						
+MW355301.1	HEV	AL_3	AL_3f					genotype	false						
+KU980235.1	HEV	AL_3						genotype	false						
+KC492825.1	HEV	AL_4	AL_4a					genotype	false						
+PV089662.1	HEV	AL_3						genotype	false						
+MW355237.1	HEV	AL_3	AL_3f					genotype	false						
+MW355287.1	HEV	AL_3	AL_3c					genotype	false						
+MF444069.1	HEV	AL_3	AL_3f					genotype	false						
+PV089665.1	HEV	AL_3						genotype	false						
+HM055578.1	HEV	AL_3	AL_3e					genotype	false						
+MF444058.1	HEV	AL_3	AL_3f					genotype	false						
+MW355303.1	HEV	AL_3	AL_3c					genotype	false						
+PQ160050.1	HEV	AL_1	AL_1e					genotype	false						
+MF444055.1	HEV	AL_3	AL_3f					genotype	true	8429	10352	0.000000001033	3Seq	ref_AB369687	ref_EU723513
+MF444027.1	HEV	AL_3	AL_3f					genotype	false						
+MT840362.1	HEV	AL_3	AL_3c					genotype	false						
+MF444052.1	HEV	AL_3	AL_3f					genotype	false						
+MF444076.1	HEV	AL_3	AL_3f					genotype	false						
+MH377723.1	HEV	AL_3	AL_3c					genotype	false						
+MF444057.1	HEV	AL_3	AL_3f					genotype	false						
+MH410175.1	HEV							genotype	false						
+MW355392.1	HEV	AL_3	AL_3f					genotype	false						
+MH504145.1	HEV	AL_3	AL_3e					genotype	false						
+MW355379.1	HEV	AL_3	AL_3c					genotype	false						
+KX172133.1	HEV	AL_3	AL_3c					genotype	false						
+MW355221.1	HEV	AL_3	AL_3c					genotype	false						
+MF444128.1	HEV	AL_3	AL_3c					genotype	false						
+MF444068.1	HEV	AL_3	AL_3f					genotype	false						
+PX597111.1	HEV	AL_1	AL_1e					genotype	false						
+KT447526.1	HEV	AL_3	AL_3a					genotype	false						
+PQ206571.1	HEV	AL_4	AL_4d					genotype	false						
+MW355263.1	HEV	AL_3	AL_3c					genotype	false						
+KC618402.1	HEV	AL_3	AL_3c					genotype	false						
+KU356184.1	HEV	AL_4	AL_4h					genotype	false						
+MW355362.1	HEV	AL_3	AL_3c					genotype	false						
+JF443726.1	HEV	AL_1	AL_1f					genotype	false						
+MW355281.1	HEV	AL_3						genotype	false						
+MW355297.1	HEV	AL_3	AL_3c					genotype	false						
+MW355290.1	HEV	AL_3						genotype	false						
+MH450021.1	HEV	AL_3	AL_3c					genotype	false						
+MH450020.1	HEV	AL_3	AL_3f					genotype	false						
+HM439284.1	HEV	AL_4	AL_4i					genotype	false						
+MF444062.1	HEV	AL_3	AL_3f					genotype	false						
+PQ557137.1	HEV	AL_3	AL_3ra					genotype	false						
+MH450029.1	HEV	AL_3	AL_3f					genotype	false						
+JQ740781.1	HEV	AL_4	AL_4h					genotype	false						
+MF444121.1	HEV	AL_3	AL_3_JQ953664					genotype	false						
+MF444116.1	HEV	AL_3	AL_3f					genotype	false						
+JQ013794.1	HEV	AL_3	AL_3h					genotype	false						
+MW355348.1	HEV	AL_3	AL_3f					genotype	false						
+MW355294.1	HEV	AL_3	AL_3c					genotype	false						
+MW355217.1	HEV	AL_3	AL_3c					genotype	false						
+JF443720.1	HEV	AL_1	AL_1a					genotype	true	1219	3239	0.000000000019	3Seq	ref_M73218	ref_FJ457024
+PP706698.1	HEV	AL_3						genotype	false						
+MF444031.1	HEV	AL_3	AL_3c					genotype	false						
+MW355339.1	HEV	AL_3	AL_3f					genotype	false						
+MH450026.1	HEV	AL_3	AL_3f					genotype	false						
+MW355280.1	HEV	AL_3	AL_3c					genotype	false						
+MW355228.1	HEV	AL_3	AL_3f					genotype	false						
+MH504157.1	HEV	AL_1	AL_1a					genotype	false						
+PQ160052.1	HEV	AL_1	AL_1e					genotype	true	6136	6333	0.000000550974	3Seq	ref_FJ457024	ref_AB369688
+JF443717.1	HEV	AL_1	AL_1c					genotype	false						
+MH450025.1	HEV	AL_3	AL_3f					genotype	false						
+KY929404.1	HEV	AL_4	AL_4h					genotype	false						
+MW355375.1	HEV	AL_3	AL_3f					genotype	false						
+MF444084.1	HEV	AL_3	AL_3f					genotype	false						
+MF444061.1	HEV	AL_3	AL_3f					genotype	true	8429	10017	0.000000006426	3Seq	ref_AB369687	ref_EU723513
+MF444060.1	HEV	AL_3	AL_3f					genotype	false						
+MG211750.1	HEV	AL_3						genotype	false						
+MW355327.1	HEV	AL_3	AL_3c					genotype	false						
+MF444107.1	HEV	AL_3	AL_3f					genotype	true	8429	10103	0.000000007983	3Seq	ref_AB369687	ref_EU723513
+MW355251.1	HEV	AL_3	AL_3f					genotype	false						
+PQ206570.1	HEV	AL_4	AL_4d					genotype	false						
+MW355264.1	HEV	AL_3	AL_3c					genotype	false						
+MW355401.1	HEV	AL_3	AL_3f					genotype	false						
+MT840360.1	HEV	AL_3	AL_3c					genotype	false						
+MW355239.1	HEV	AL_3	AL_3f					genotype	false						
+MW355262.1	HEV	AL_3	AL_3c					genotype	false						
+MW355253.1	HEV	AL_3	AL_3f					genotype	false						
+HM152568.1	HEV	AL_4	AL_4d					genotype	false						
+MF444073.1	HEV	AL_3	AL_3f					genotype	true	8429	10017	0.000000234221	3Seq	ref_AB369687	ref_EU723513
+FJ527832.2	HEV	AL_3	AL_3b					genotype	false						
+MH504139.1	HEV	AL_3	AL_3e					genotype	false						
+KR872414.1	HEV	AL_4	AL_4h					genotype	false						
+MW355257.1	HEV	AL_3	AL_3f					genotype	false						
+MW355304.1	HEV	AL_3	AL_3c					genotype	false						
+MW355383.1	HEV	AL_3	AL_3i					genotype	false						
+MH504143.1	HEV	AL_3	AL_3e					genotype	false						
+MW355255.1	HEV	AL_3	AL_3f					genotype	false						
+PQ160046.1	HEV	AL_1	AL_1e					genotype	false						
+JQ993308.1	HEV	AL_4	AL_4i					genotype	false						
+MW355350.1	HEV	AL_3	AL_3f					genotype	false						
+MK192405.1	HEV							genotype	false						
+MW355398.1	HEV	AL_3	AL_3f					genotype	false						
+MW355238.1	HEV	AL_3	AL_3f					genotype	true	567	8429	0.000000004808	3Seq	ref_EU723513	ref_AB369687
+PQ206573.1	HEV	AL_4	AL_4d					genotype	false						
+MW355233.1	HEV	AL_3	AL_3c					genotype	false						
+MW355306.1	HEV	AL_3	AL_3f					genotype	false						
+MF444131.1	HEV	AL_3	AL_3_JQ953664					genotype	false						
+MN614140.1	HEV	AL_3	AL_3c					genotype	false						
+MT362712.1	HEV	AL_3	AL_3c					genotype	false						
+PV089663.1	HEV	AL_3						genotype	false						
+MH504152.1	HEV	AL_3	AL_3e					genotype	false						
+KR872415.1	HEV	AL_4	AL_4h					genotype	false						
+FJ457024.1	HEV	AL_1						genotype	false						
+MF444029.1	HEV	AL_3	AL_3f					genotype	false						
+MW355225.1	HEV	AL_3	AL_3a					genotype	false						
+FJ653660.1	HEV	AL_3	AL_3f					genotype	false						
+MF959765.1	HEV	AL_3						genotype	false						
+MF444043.1	HEV	AL_3	AL_3c					genotype	false						
+MN646691.1	HEV	AL_3	AL_3e					genotype	false						
+MW355360.1	HEV	AL_3	AL_3c					genotype	false						
+MN646695.1	HEV	AL_3	AL_3f					genotype	false						
+MW355321.1	HEV	AL_3	AL_3c					genotype	false						
+KC166970.1	HEV	AL_3	AL_3f					genotype	false						
+FJ956757.1	HEV	AL_3	AL_3f					genotype	false						
+MF444139.1	HEV	AL_3	AL_3f					genotype	false						
+JF443724.1	HEV	AL_1	AL_1f					genotype	true	1159	2316	0.000000522580	3Seq	ref_FJ457024	ref_JF443721
+JF443722.1	HEV	AL_1	AL_1f					genotype	false						
+MH377722.1	HEV	AL_3	AL_3c					genotype	false						
+MW355278.1	HEV	AL_3	AL_3c					genotype	false						
+MF444135.1	HEV	AL_3	AL_3f					genotype	false						
+MN646689.1	HEV	AL_3	AL_3f					genotype	false						
+MW355332.1	HEV	AL_3	AL_3c					genotype	false						
+MH410176.1	HEV							genotype	false						
+MW355377.1	HEV	AL_3						genotype	false						
+PX597109.1	HEV	AL_1	AL_1e					genotype	false						
+KT591534.1	HEV	AL_3	AL_3f					genotype	false						
+JQ953664.1	HEV	AL_3	AL_3_JQ953664					genotype	false						
+MF444106.1	HEV	AL_3	AL_3c					genotype	false						
+MW355395.1	HEV	AL_3	AL_3f					genotype	false						
+MF444143.1	HEV	AL_3	AL_3c					genotype	false						
+PQ160057.1	HEV	AL_1	AL_1e					genotype	false						
+PX971288.1	HEV	AL_3						genotype	false						
+MF444046.1	HEV	AL_3	AL_3f					genotype	false						
+MF444089.1	HEV	AL_3						genotype	false						
+MH504149.1	HEV	AL_3	AL_3e					genotype	false						
+MW355318.1	HEV	AL_3	AL_3f					genotype	false						
+MW837253.1	HEV	AL_3	AL_3c					genotype	false						
+MW355373.1	HEV	AL_3	AL_3f					genotype	false						
+KJ873911.1	HEV	AL_3	AL_3_KJ873911					genotype	false						
+MH184581.1	HEV	AL_3	AL_3e					genotype	false						
+KU356185.1	HEV	AL_4	AL_4h					genotype	false						
+KT591533.1	HEV	AL_3	AL_3f					genotype	false						
+MW355236.1	HEV	AL_3						genotype	false						
+KC166969.1	HEV	AL_3	AL_3f					genotype	false						
+MW355218.1	HEV	AL_3	AL_3c					genotype	false						
+PQ206569.1	HEV	AL_4	AL_4d					genotype	false						
+MW355390.1	HEV	AL_3	AL_3f					genotype	false						
+MW355341.1	HEV	AL_3	AL_3c					genotype	false						
+MF444042.1	HEV	AL_3	AL_3c					genotype	false						
+MF959764.1	HEV	AL_3	AL_3i					genotype	false						
+MN401237.1	HEV	AL_3	AL_3f					genotype	false						
+MT920909.1	HEV							genotype	false						
+MW355266.1	HEV	AL_3	AL_3f					genotype	false						
+MW355273.1	HEV	AL_3	AL_3c					genotype	false						
+MF444120.1	HEV	AL_3	AL_3h					genotype	false						
+KJ496144.1	HEV	AL_7	AL_7_KJ496144					genotype	false						
+MW355337.1	HEV	AL_3	AL_3f					genotype	false						
+MW002522.1	HEV	AL_3	AL_3ra					genotype	false						
+MW355268.1	HEV	AL_3	AL_3c					genotype	false						
+MK192407.1	HEV							genotype	false						
+MF444138.1	HEV	AL_3	AL_3f					genotype	false						
+JN906975.1	HEV	AL_3	AL_3f					genotype	false						
+MW355397.1	HEV	AL_3	AL_3f					genotype	false						
+MW355387.1	HEV	AL_3	AL_3f					genotype	false						
+MH504141.1	HEV	AL_3	AL_3e					genotype	false						
+MW835252.1	HEV	AL_7	AL_7a					genotype	false						
+MH504132.1	HEV	AL_3	AL_3c					genotype	false						
+MW355331.1	HEV	AL_3	AL_3f					genotype	false						
+MH504155.1	HEV	AL_1						genotype	false						
+MW355241.1	HEV	AL_3	AL_3f					genotype	false						
+MW355314.1	HEV	AL_3	AL_3c					genotype	false						
+MH377724.1	HEV	AL_3	AL_3e					genotype	false						
+MW355252.1	HEV	AL_3	AL_3f					genotype	false						
+MW355270.1	HEV	AL_3	AL_3c					genotype	false						
+PX597112.1	HEV	AL_1	AL_1e					genotype	false						
+MH450023.1	HEV	AL_3	AL_3f					genotype	false						
+MW355272.1	HEV	AL_3	AL_3f					genotype	false						
+MW355356.1	HEV	AL_3	AL_3f					genotype	false						
+MF444102.1	HEV	AL_3	AL_3f					genotype	false						
+MW355343.1	HEV	AL_3	AL_3f					genotype	false						
+MG573193.1	HEV	AL_3						genotype	false						
+KU176130.1	HEV	AL_3						genotype	false						
+MW355299.1	HEV	AL_3	AL_3f					genotype	false						
+MW355226.1	HEV	AL_3	AL_3c					genotype	false						
+MF444087.1	HEV	AL_3	AL_3f					genotype	false						
+MH504142.1	HEV	AL_3	AL_3e					genotype	false						
+MW355384.1	HEV	AL_3	AL_3f					genotype	false						
+KT447528.1	HEV	AL_3	AL_3a					genotype	false						
+JF443725.1	HEV	AL_1	AL_1f					genotype	true	1198	2787	0.000000000001	3Seq	ref_FJ457024	ref_JF443721
+KU356187.1	HEV	AL_4	AL_4h					genotype	false						
+MF444066.1	HEV	AL_3	AL_3f					genotype	true	8429	10017	0.000000000784	3Seq	ref_AB369687	ref_EU723513
+MW355261.1	HEV	AL_3	AL_3f					genotype	false						
+MW355296.1	HEV	AL_3	AL_3f					genotype	false						
+MW355229.1	HEV	AL_3	AL_3c					genotype	false						
+MW355334.1	HEV	AL_3	AL_3c					genotype	false						
+MG783571.1	HEV							genotype	false						
+MF444104.1	HEV	AL_3	AL_3f					genotype	false						
+MF444119.1	HEV	AL_3	AL_3f					genotype	false						
+KR872417.1	HEV	AL_4	AL_4h					genotype	false						
+KF736234.1	HEV	AL_4	AL_4h					genotype	false						
+MW355342.1	HEV	AL_3	AL_3f					genotype	false						
+MT840363.1	HEV	AL_3	AL_3e					genotype	false						
+MW355275.1	HEV	AL_3	AL_3_JQ953664					genotype	false						
+MF444096.1	HEV	AL_3	AL_3f					genotype	false						
+MW355277.1	HEV	AL_3	AL_3c					genotype	false						
+PV089670.1	HEV	AL_3	AL_3f					genotype	false						
+MH504163.1	HEV	AL_1	AL_1a					genotype	false						
+MF444051.1	HEV	AL_3	AL_3f					genotype	false						
+PQ557134.1	HEV	AL_3	AL_3ra					genotype	false						
+MF444059.1	HEV	AL_3	AL_3f					genotype	false						
+JF443718.1	HEV	AL_1	AL_1a					genotype	false						
+MF444074.1	HEV	AL_3	AL_3ra					genotype	false						
+JX109834.1	HEV	AL_3	AL_3ra					genotype	false						
+JF443723.1	HEV	AL_1	AL_1f					genotype	false						
+PQ160045.1	HEV	AL_1	AL_1e					genotype	false						
+KT159771.1	HEV	AL_3	AL_3c					genotype	false						
+MH504128.1	HEV	AL_3	AL_3c					genotype	false						
+MW355380.1	HEV	AL_3	AL_3f					genotype	false						
+MW355358.1	HEV	AL_3	AL_3f					genotype	false						
+MW355330.1	HEV	AL_3	AL_3f					genotype	false						
+MW355378.1	HEV	AL_3	AL_3c					genotype	false						
+MF444122.1	HEV	AL_3	AL_3c					genotype	false						
+KY436507.1	HEV	AL_1						genotype	false						
+MW355391.1	HEV	AL_3	AL_3c					genotype	false						
+PQ160051.1	HEV	AL_1	AL_1e					genotype	false						
+MH504124.1	HEV	AL_3	AL_3c					genotype	false						
+MW355315.1	HEV	AL_3	AL_3f					genotype	false						
+MT840359.1	HEV	AL_3	AL_3c					genotype	false						
+MT364355.1	HEV	AL_3	AL_3ra					genotype	false						
+MH504161.1	HEV	AL_1	AL_1a					genotype	false						
+MF444047.1	HEV	AL_3	AL_3f					genotype	false						
+MW355246.1	HEV	AL_3	AL_3h					genotype	false						
+MW355324.1	HEV	AL_3	AL_3f					genotype	false						
+MF444037.1	HEV	AL_3	AL_3h					genotype	false						
+MW355274.1	HEV	AL_3	AL_3f					genotype	false						
+MH504154.1	HEV	AL_1	AL_1f					genotype	false						
+KT591532.1	HEV	AL_3	AL_3f					genotype	false						
+KJ013415.1	HEV	AL_3	AL_3ra					genotype	false						
+PQ160055.1	HEV	AL_1	AL_1e					genotype	true	6136	6333	0.000001707978	3Seq	ref_FJ457024	ref_AB369688
+MH504151.1	HEV	AL_3	AL_3f					genotype	false						
+MF444038.1	HEV	AL_3	AL_3f					genotype	false						
+MW355288.1	HEV	AL_3	AL_3a					genotype	false						
+PV089666.1	HEV	AL_3						genotype	false						
+MF444063.1	HEV	AL_3	AL_3c					genotype	false						
+MW355220.1	HEV	AL_3	AL_3c					genotype	false						
+KY232312.1	HEV	AL_3	AL_3f					genotype	false						
+MW355394.1	HEV	AL_3	AL_3f					genotype	false						
+MW355249.1	HEV	AL_3	AL_3f					genotype	false						
+MK390970.1	HEV	AL_3						genotype	false						
+MW355298.1	HEV	AL_3	AL_3c					genotype	false						
+MF444036.1	HEV	AL_3	AL_3f					genotype	true	8429	10109	0.000000020987	3Seq	ref_AB369687	ref_EU723513
+MW355282.1	HEV	AL_3	AL_3c					genotype	false						
+MW355244.1	HEV	AL_3	AL_3f					genotype	false						
+MF444034.1	HEV	AL_3	AL_3f					genotype	false						
+MF444083.1	HEV	AL_3	AL_3f					genotype	false						
+JX565469.1	HEV	AL_3	AL_3ra					genotype	false						
+MF444095.1	HEV	AL_3	AL_3f					genotype	false						
+MW355235.1	HEV	AL_3	AL_3c					genotype	false						
+PP291578.1	HEV	AL_1	AL_1b					genotype	false						
+FJ705359.1	HEV	AL_3	AL_3c					genotype	false						
+MK330953.1	HEV	AL_4	AL_4a					genotype	false						
+MH504127.1	HEV	AL_3	AL_3c					genotype	false						
+MN401238.1	HEV	AL_1	AL_1a					genotype	false						
+MW355340.1	HEV	AL_3	AL_3f					genotype	false						
+MW355370.1	HEV	AL_3	AL_3c					genotype	false						
+MF444041.1	HEV	AL_3	AL_3f					genotype	false						
+MW355329.1	HEV	AL_3	AL_3f					genotype	false						
+PQ160048.1	HEV	AL_1	AL_1e					genotype	false						
+MW355402.1	HEV	AL_3	AL_3c					genotype	false						
+PP271983.1	HEV	AL_2	AL_2a					genotype	false						
+MW355243.1	HEV	AL_3						genotype	false						
+MW355359.1	HEV	AL_3						genotype	false						
+MW355372.1	HEV	AL_3	AL_3c					genotype	false						
+MW355325.1	HEV	AL_3	AL_3f					genotype	false						
+MF444056.1	HEV	AL_3	AL_3h					genotype	false						
+MW355349.1	HEV	AL_3	AL_3f					genotype	false						
+MW355245.1	HEV	AL_3	AL_3c					genotype	false						
+JQ953665.1	HEV	AL_3	AL_3e					genotype	false						
+KU356183.1	HEV	AL_4	AL_4h					genotype	false						
+MF444098.1	HEV	AL_3	AL_3f					genotype	false						
+MF444117.1	HEV	AL_3	AL_3f					genotype	false						
+MW355368.1	HEV	AL_3						genotype	false						
+MH450022.1	HEV	AL_3	AL_3a					genotype	false						
+GU937805.1	HEV	AL_3	AL_3ra					genotype	false						
+JF443721.1	HEV	AL_1	AL_1f					genotype	false						
+MW355399.1	HEV	AL_3						genotype	false						
+MW355363.1	HEV	AL_3	AL_3f					genotype	false						
+MF444078.1	HEV	AL_3	AL_3f					genotype	false						
+JQ013795.1	HEV	AL_3	AL_3e					genotype	false						
+PP291577.1	HEV	AL_1	AL_1b					genotype	false						
+MF444065.1	HEV	AL_3	AL_3c					genotype	false						
+MW355313.1	HEV	AL_3	AL_3c					genotype	false						
+MW355320.1	HEV	AL_3	AL_3c					genotype	false						
+PX597110.1	HEV	AL_1	AL_1e					genotype	false						
+MG211751.1	HEV	AL_3						genotype	false						
+MW355285.1	HEV	AL_3	AL_3f					genotype	false						
+MF444126.1	HEV	AL_3	AL_3f					genotype	false						
+KT633715.1	HEV	AL_3	AL_3b					genotype	false						
+PX724177.1	HEV							genotype	false						
+MF444090.1	HEV	AL_3	AL_3f					genotype	false						
+MH450028.1	HEV	AL_3	AL_3f					genotype	false						
+MW355352.1	HEV	AL_3	AL_3f					genotype	false						
+KU356182.1	HEV	AL_4	AL_4h					genotype	false						
+JN906974.1	HEV	AL_3	AL_3f					genotype	false						
+MF444103.1	HEV	AL_3	AL_3f					genotype	false						
+MW355311.1	HEV	AL_3	AL_3f					genotype	false						
+KU176132.1	HEV	AL_3	AL_3h					genotype	false						
+MF444109.1	HEV	AL_3	AL_3e					genotype	false						
+MW355312.1	HEV	AL_3	AL_3c					genotype	false						
+KU747141.1	HEV	AL_3						genotype	false						
+KU747142.1	HEV	AL_3						genotype	false						
+JN906976.1	HEV	AL_3	AL_3f					genotype	false						
+MW355344.1	HEV	AL_3						genotype	false						
+MW355328.1	HEV	AL_3	AL_3c					genotype	false						
+MN614139.1	HEV	AL_3	AL_3c					genotype	false						
+PQ160068.1	HEV	AL_2	AL_2a					genotype	false						
+OQ286030.1	HEV	AL_3	AL_3i					genotype	false						
+MW355269.1	HEV	AL_3	AL_3c					genotype	false						
+PQ160056.1	HEV	AL_1	AL_1e					genotype	false						
+KC166971.1	HEV	AL_3	AL_3f					genotype	false						
+MF444132.1	HEV	AL_3	AL_3f					genotype	false						
+MW355248.1	HEV	AL_3	AL_3f					genotype	false						
+MF444077.1	HEV	AL_3	AL_3h					genotype	false						
+MH184584.1	HEV	AL_3	AL_3e					genotype	false						
+PQ160054.1	HEV	AL_1	AL_1e					genotype	false						
+PQ206568.1	HEV	AL_4	AL_4d					genotype	false						
+MF444105.1	HEV	AL_3	AL_3f					genotype	false						
+JF443719.1	HEV	AL_1	AL_1a					genotype	true	1250	3239	0.000000015926	3Seq	ref_M73218	ref_FJ457024
+MF444082.1	HEV	AL_3	AL_3f					genotype	false						
+MH809516.1	HEV	AL_2	AL_2a					genotype	false						
+KP698919.1	HEV	AL_3	AL_3e					genotype	false						
+MF444030.1	HEV	AL_3						genotype	false						
+MF444127.1	HEV	AL_3	AL_3f					genotype	false						
+MW355346.1	HEV	AL_3	AL_3f					genotype	false						
+MF444064.1	HEV	AL_3	AL_3c					genotype	false						
+MF444130.1	HEV	AL_3	AL_3f					genotype	false						
+MW355232.1	HEV	AL_3	AL_3c					genotype	false						
+MT840366.1	HEV	AL_3	AL_3c					genotype	false						
+PQ160047.1	HEV	AL_1	AL_1e					genotype	false						
+MW355400.1	HEV	AL_3						genotype	false						
+MF444050.1	HEV	AL_3	AL_3f					genotype	true	8429	10352	0.000000084716	3Seq	ref_AB369687	ref_EU723513
+KY766999.1	HEV	AL_3	AL_3_JQ953664					genotype	false						
+MW355374.1	HEV	AL_3	AL_3c					genotype	false						
+MW355260.1	HEV	AL_3	AL_3f					genotype	false						
+MW355265.1	HEV	AL_3	AL_3f					genotype	false						
+MH504126.1	HEV	AL_3	AL_3c					genotype	false						
+MW355247.1	HEV	AL_3	AL_3f					genotype	true	8429	10017	0.000000000715	3Seq	ref_AB369687	ref_EU723513
+JQ013791.1	HEV	AL_3	AL_3ra					genotype	false						
+MG674164.1	HEV	AL_3	AL_3_JQ953664					genotype	false						
+MF444092.1	HEV	AL_3	AL_3f					genotype	false						
+MW355222.1	HEV	AL_3						genotype	false						
+MF444140.1	HEV	AL_3	AL_3f					genotype	false						
+PV089667.1	HEV	AL_3						genotype	false						
+MW355292.1	HEV	AL_3	AL_3f					genotype	true	8429	10148	0.000000344128	3Seq	ref_AB369687	ref_EU723513
+PV089671.1	HEV	AL_3	AL_3f					genotype	false						
+KU356188.1	HEV	AL_4	AL_4h					genotype	false						
+MW355223.1	HEV	AL_3	AL_3f					genotype	false						
+MW355381.1	HEV	AL_3	AL_3f					genotype	false						
+MF444071.1	HEV	AL_3	AL_3c					genotype	false						
+PX724175.1	HEV							genotype	false						
+MF444124.1	HEV	AL_3	AL_3f					genotype	true	8429	10352	0.000000044847	3Seq	ref_AB369687	ref_EU723513
+MW355289.1	HEV	AL_3	AL_3f					genotype	false						
+MW355355.1	HEV	AL_3	AL_3f					genotype	false						
+MF444137.1	HEV	AL_3	AL_3f					genotype	true	8429	10109	0.000000017414	3Seq	ref_AB369687	ref_EU723513
+MF444075.1	HEV	AL_3						genotype	false						
+MW355259.1	HEV	AL_3	AL_3f					genotype	false						
+MW355234.1	HEV	AL_3	AL_3c					genotype	false						
+MW596896.1	HEV	AL_3						genotype	false						
+KX227751.1	HEV	AL_3	AL_3ra					genotype	false						
+PV089669.1	HEV	AL_3						genotype	false						
+MF444097.1	HEV	AL_3	AL_3f					genotype	false						
+PP271982.1	HEV	AL_2	AL_2a					genotype	false						
+MW355305.1	HEV	AL_3	AL_3f					genotype	true	8429	9851	0.000000001216	3Seq	ref_AB369687	ref_EU723513
+MH504146.1	HEV	AL_3	AL_3e					genotype	false						
+PQ557138.1	HEV	AL_3	AL_3ra					genotype	false						
+KY436506.1	HEV	AL_1						genotype	false						
+MF444110.1	HEV	AL_3	AL_3h					genotype	false						
+MW355279.1	HEV	AL_3	AL_3c					genotype	false						
+MF444144.1	HEV	AL_3	AL_3f					genotype	false						
+MF444039.1	HEV	AL_3	AL_3f					genotype	false						
+MW355219.1	HEV	AL_3	AL_3f					genotype	false						
+MW383253.1	HEV	AL_3	AL_3f					genotype	false						
+MW355293.1	HEV	AL_3	AL_3c					genotype	false						
+MW355347.1	HEV	AL_3	AL_3c					genotype	false						
+MK050463.1	HEV	AL_3	AL_3ra					genotype	false						

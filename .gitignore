@@ -1,47 +1,36 @@
-# Byte-compiled / optimized / DLL files
+# Python / OS
 __pycache__/
-*.py[cod]
-*$py.class
-
-# OS-specific
+*.pyc
+*.pyo
+*.pyd
 .DS_Store
-Thumbs.db
-
-# Virtual environments
-.venv/
-venv/
-env/
-envs/*/
-
-# Snakemake internal
-.snakemake/
-
-# Temp and job outputs
-temp/
-tmp/
 .pytest_cache/
+*.log
 
-# Large preprocessed results and alignments
-results/**/*.fasta
-results/**/*.tsv
-results/**/*.csv
-results/**/*.xml
-results/**/*.log
-results/**/*.bionj
-results/**/*.iqtree
-results/**/*.ckp.gz
-results/**/*.mldist
-results/**/*.treefile
-results/**/*.splits.nex
-results/**/*.splits
-results/**/*.contree
-results/**/split_fasta/
-results/**/resistance/
-results/**/glue/
-results/**/*.pkl
+# Temp / Job directories
+scratch/
+backups/
+results/jobs/
+results/cache/
+results/*/split_fasta/
+results/*/resistance/
+results/*/alignments/
+results/*/glue/
+results/*/recombination/
+results/hbv/split_fasta/
+results/hcv/split_fasta/
+results/hev/split_fasta/
+results/hbv/resistance/
+results/hcv/resistance/
+results/hev/resistance/
+results/hbv/glue/
+results/hcv/glue/
+results/hev/glue/
+results/hbv/recombination/
+results/hcv/recombination/
+results/hev/recombination/
+run_test.3s.*
 
-# Large raw dataset
-data/IHME-GBD_2021_DATA-9e7ec2c0-1.csv
-
-# 3seq P-value table file (457MB, must be copied out-of-band)
-**/PVT.3SEQ.2017.700
+# Large binary reference data
+scripts/PVT.3SEQ.2017.700
+scripts/BinProbs

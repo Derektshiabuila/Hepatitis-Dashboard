@@ -1,11 +1,12 @@
 from Bio import Phylo
 import io
 import plotly.graph_objects as go
+from hep_theme import apply_heptracker_figure_style
 
 def build_tree_figure(newick_str: str) -> go.Figure:
     """Parse Newick string and return a Plotly rectangular tree figure."""
     if not newick_str:
-        return go.Figure()
+        return apply_heptracker_figure_style(go.Figure())
 
     try:
         tree = Phylo.read(io.StringIO(newick_str), "newick")
@@ -88,16 +89,20 @@ def build_tree_figure(newick_str: str) -> go.Figure:
     ))
     
     # Estimate height based on number of terminals (approx 20px per terminal)
-    height = max(400, y_current * 20)
+    height = max(420, y_current * 22)
+    max_x = max(text_x) if text_x else 1
     
     fig.update_layout(
         height=height,
         showlegend=False,
         plot_bgcolor='white',
         paper_bgcolor='white',
-        margin=dict(l=10, r=120, t=10, b=10),
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        margin=dict(l=20, r=240, t=20, b=20),
+        xaxis=dict(
+            showgrid=False, zeroline=False, showticklabels=False,
+            range=[-max_x * 0.03, max_x * 1.45]
+        ),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, autorange='reversed'),
     )
     
-    return fig
+    return apply_heptracker_figure_style(fig)

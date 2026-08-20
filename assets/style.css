@@ -1,52 +1,495 @@
-.resource-card {
-    transition: transform 0.2s, box-shadow 0.2s;
+.footer-logo {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    filter: grayscale(30%);
 }
 
-.resource-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+.footer-logo:hover {
+    opacity: 0.8;
+    transform: scale(1.05);
+    filter: grayscale(0%);
 }
 
-.btn-primary {
-    border-radius: 6px;
-}
-
-.team-card {
-    transition: transform 0.3s;
-}
-
-.team-card:hover {
-    transform: translateY(-5px);
-}
-
-.department-card {
-    transition: all 0.3s;
-}
-
-.department-card:hover {
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
-}
-
-/* Responsive adjustments */
+/* Mobile responsiveness */
 @media (max-width: 768px) {
-    .contact-icon {
-        margin-right: 1rem !important;
+    .footer-logo {
+        height: 35px !important;
+        margin: 0.5rem !important;
     }
 }
 
-/* Circular avatar with double ring */
-.avatar-ring {
-  width: 160px;           /* adjust size as you like */
-  aspect-ratio: 1 / 1;
-  border-radius: 50%;
-  overflow: hidden;       /* clips the image to a circle */
-  /* two rings: inner dark panel, outer current virus accent */
-  box-shadow: 0 0 0 6px var(--panel), 0 0 0 10px var(--current-accent);
+/* Ensure proper card height behavior */
+.card {
+    display: flex;
+    flex-direction: column;
 }
 
-.avatar-ring img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;      /* keep face centered & fill */
-  display: block;
+.card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* Important for flex children */
+}
+
+/* Graph container */
+.graph-container {
+    flex: 1;
+    min-height: 400px;
+    position: relative;
+}
+
+/* Plotly graph adjustments */
+.js-plotly-plot .plotly .main-svg {
+    overflow: visible !important;
+}
+
+/* style.css - Professional Dashboard Enhancements */
+
+:root {
+    --font-primary: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --font-heading: 'Montserrat', 'Segoe UI', sans-serif;
+    --color-text: #2c3e50;
+    --color-text-light: #6c757d;
+    --line-height: 1.6;
+}
+
+body {
+    font-family: var(--font-primary);
+    color: var(--color-text);
+    line-height: var(--line-height);
+    font-weight: 400;
+    background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 100%);
+    background-attachment: fixed;
+    position: relative;
+}
+
+/* Optional: Add a very subtle pattern overlay */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23e9ecef' fill-opacity='0.15' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='3'/%3E%3Ccircle cx='13' cy='13' r='3'/%3E%3C/g%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: -1;
+}
+
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 0.75rem;
+}
+
+.card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.fw-bold {
+    font-weight: 600 !important;
+}
+
+.text-muted {
+    color: #6c757d !important;
+}
+
+.lead {
+    font-size: 1.05rem;
+    font-weight: 400;
+}
+
+/* Button enhancements */
+.btn {
+    transition: all 0.2s ease;
+    border-width: 1px;
+    font-weight: 500;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+}
+
+.btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Card interactions */
+.card {
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    border: 1px solid rgba(0,0,0,0.075);
+    border: none;
+    backdrop-filter: blur(4px);
+    background-color: rgba(255, 255, 255, 0.95);
+}
+
+.card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.12) !important;
+    border-color: rgba(0,0,0,0.1);
+}
+
+/* Smooth transitions for dropdowns */
+.Select-menu-outer {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* Loading bar animation */
+@keyframes shimmer {
+    0% { background-position: -1000px 0; }
+    100% { background-position: 1000px 0; }
+}
+
+.shimmer {
+    animation: shimmer 2s infinite linear;
+    background: linear-gradient(to right, #f6f7f8 8%, #edeef1 18%, #f6f7f8 33%);
+    background-size: 1000px 100%;
+}
+
+/* Focus states for accessibility */
+.btn:focus,
+.form-control:focus,
+.form-select:focus {
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+    border-color: #3498db;
+}
+
+/* Pulse animation for important indicators */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Selection color */
+::selection {
+    background-color: rgba(52, 152, 219, 0.2);
+    color: #2c3e50;
+}
+
+/* Responsive typography */
+@media (max-width: 768px) {
+    h1 { font-size: calc(1.375rem + 1.5vw); }
+    h2 { font-size: calc(1.325rem + 0.9vw); }
+    h3 { font-size: calc(1.3rem + 0.6vw); }
+    h4 { font-size: calc(1.275rem + 0.3vw); }
+    .card-title { font-size: 1rem; }
+}
+
+/* Additional responsive classes */
+.px-responsive {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+
+@media (min-width: 576px) {
+    .px-responsive {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+}
+
+@media (min-width: 768px) {
+    .px-responsive {
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+    }
+}
+
+@media (min-width: 992px) {
+    .px-responsive {
+        padding-left: 3rem;
+        padding-right: 3rem;
+    }
+}
+
+/* Loading component styles */
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(248, 249, 250, 0.7);
+    border-radius: 8px;
+}
+
+.loading-text {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin-top: 0.5rem;
+}
+
+/* ==========================================================================
+   HEPATITIS SURVEILLANCE DASHBOARD - LIGHT THEME & RESTRUCTURING STYLES
+   ========================================================================== */
+
+:root {
+    --bg-light: #F8FAFC;
+    --card-bg: #FFFFFF;
+    --card-border: #E2E8F0;
+    --text-main: #0F172A;
+    --text-muted: #475569;
+    --text-subtle: #64748B;
+    --primary-blue: #2563EB;
+    --primary-blue-hover: #1D4ED8;
+    --accent-rose: #E11D48;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.app-shell, .app-shell-layout, .hep-dashboard-shell {
+    background-color: var(--bg-light) !important;
+    color: var(--text-main) !important;
+    min-height: 100vh;
+}
+
+.hep-main-content {
+    background-color: var(--bg-light) !important;
+    padding: 1.5rem 2rem;
+}
+
+/* Top Banner Header (#0041C2 background with moving text) */
+.hep-overall-header {
+    background-color: #0041C2 !important;
+    color: #FFFFFF !important;
+    padding: 0.85rem 1rem !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: 0 4px 14px rgba(0, 65, 194, 0.3) !important;
+    margin-bottom: 1.5rem !important;
+    overflow: hidden !important;
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    height: 52px !important;
+}
+
+.hep-marquee-track {
+    display: flex !important;
+    width: max-content !important;
+    animation: hep-marquee-slide 22s linear infinite !important;
+}
+
+.hep-marquee-track:hover {
+    animation-play-state: paused !important;
+}
+
+.hep-marquee-content {
+    font-size: 1.25rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+    color: #FFFFFF !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 1.5rem !important;
+    padding-right: 1.5rem !important;
+}
+
+.hep-marquee-badge {
+    display: inline-block !important;
+    width: 8px !important;
+    height: 8px !important;
+    background-color: #38BDF8 !important;
+    border-radius: 50% !important;
+    margin-left: 1.5rem !important;
+}
+
+@keyframes hep-marquee-slide {
+    0% {
+        transform: translateX(0%);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+/* Header Filter Bar & Wider Logo */
+.hep-filter-bar-card {
+    background: var(--card-bg) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-sm) !important;
+    padding: 1rem 1.25rem !important;
+    margin-bottom: 1.5rem;
+}
+
+.hep-brand-logo-wide {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-right: 1.25rem;
+    border-right: 2px solid var(--card-border);
+    min-width: 280px;
+}
+
+.hep-brand-logo-wide .brand-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+.hep-brand-logo-wide .brand-title {
+    font-weight: 800;
+    font-size: 1.2rem;
+    line-height: 1.1;
+    color: var(--text-main);
+    letter-spacing: -0.01em;
+}
+
+.hep-brand-logo-wide .brand-subtitle {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--primary-blue);
+    text-transform: uppercase;
+}
+
+/* Filter Labels & Dropdowns in Light Mode */
+.hep-filter-label {
+    font-size: 0.725rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-subtle) !important;
+    margin-bottom: 0.35rem !important;
+}
+
+/* Reset Button */
+.btn-reset-filters {
+    background-color: #F1F5F9 !important;
+    color: #475569 !important;
+    border: 1px solid #CBD5E1 !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+    border-radius: 8px !important;
+    padding: 0.45rem 0.9rem !important;
+    transition: all 0.2s ease !important;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.btn-reset-filters:hover {
+    background-color: #E2E8F0 !important;
+    color: #0F172A !important;
+    border-color: #94A3B8 !important;
+}
+
+/* Vertical Block for Region Summary */
+.hep-region-block {
+    background: var(--card-bg) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-sm) !important;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.hep-region-block .card-header-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0;
+}
+
+/* Map Mode Selector Above Map */
+.hep-map-mode-bar {
+    background: #F1F5F9;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 0.4rem 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* Section Selector Tabs */
+.hep-section-selector-container {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    padding: 0.5rem 0.75rem;
+    box-shadow: var(--shadow-sm);
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* General Light Theme Cards */
+.card {
+    background-color: var(--card-bg) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-sm) !important;
+    color: var(--text-main) !important;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-md) !important;
+}
+
+.text-white {
+    color: var(--text-main) !important;
+}
+
+.bg-dark {
+    background-color: var(--card-bg) !important;
+    color: var(--text-main) !important;
+}
+
+/* Select/Dropdown styling overrides for light mode */
+.Select-control, .dash-dropdown .Select-control {
+    background-color: #FFFFFF !important;
+    border-color: #CBD5E1 !important;
+    color: #0F172A !important;
+}
+
+.Select-menu-outer {
+    background-color: #FFFFFF !important;
+    border-color: #CBD5E1 !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+}
+
+.Select-value-label, .Select-option {
+    color: #0F172A !important;
 }

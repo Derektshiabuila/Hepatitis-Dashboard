@@ -540,9 +540,9 @@ def load_and_preprocess_data():
             import pickle
             with open(cache_file, 'rb') as f:
                 data_store = pickle.load(f)
-                if 'who_gho_df' not in data_store:
+                if 'who_gho_df' not in data_store or data_store.get('who_gho_df') is None or (isinstance(data_store.get('who_gho_df'), pd.DataFrame) and data_store['who_gho_df'].empty):
                     cache_valid = False
-                    print("🔄 Cache missing 'who_gho_df'. Invalidating cache.")
+                    print("🔄 Cache missing or has empty 'who_gho_df'. Invalidating cache.")
                 else:
                     print("✅ Cache loaded successfully.")
                     return data_store

@@ -1,9 +1,9 @@
 """
 hep_theme.py
-Shared dark-navy theme for the Hepatitis dashboard: brand colors, a registered
-Plotly template ("hep_dark"), genotype/sequential color-scale builders, and
-shared dash_table style constants. Import this once near the top of any page
-module and call register_theme() before building figures.
+Shared light theme for the Hepatitis dashboard: brand colors, a registered
+Plotly template ("hep_dark" registered for compatibility, tuned for light theme),
+genotype/sequential color-scale builders, and shared dash_table style constants.
+Import this once near the top of any page module and call register_theme() before building figures.
 """
 
 import plotly.graph_objects as go
@@ -14,25 +14,26 @@ import colorsys
 # BRAND PALETTE
 # ---------------------------------------------------------------------------
 VIRUS_COLORS = {
-    "HAV": "#F5A623",   # warm amber
-    "HBV": "#E84057",   # vivid crimson
-    "HCV": "#00D4AA",   # electric teal
-    "HDV": "#A259FF",   # vivid violet
-    "HEV": "#8BC34A",   # lime green
-    "RECOMBINANT": "#A259FF",
-    "DANGER": "#FF4D6D",
+    "HAV": "#D97706",   # warm amber / orange
+    "HBV": "#E11D48",   # vivid rose crimson
+    "HCV": "#0D9488",   # deep teal
+    "HDV": "#7C3AED",   # vivid violet
+    "HEV": "#65A30D",   # lime green
+    "RECOMBINANT": "#8B5CF6",
+    "DANGER": "#EF4444",
 }
 
-BG = "#0F1419"
-PANEL = "#161D26"
-PANEL_2 = "#1B232E"
-BORDER = "rgba(255,255,255,0.10)"
-TEXT = "#ECEFF2"
-TEXT_DIM = "#8B98A5"
-TEXT_FAINT = "#5C6773"
+BG = "#F5F6F8"
+PANEL = "#FFFFFF"
+PANEL_2 = "#F0F2F5"
+BORDER = "rgba(15,23,42,0.10)"
+TEXT = "#0F172A"
+TEXT_DIM = "#5B6472"
+TEXT_FAINT = "#8A94A6"
 
-FONT_SANS = "IBM Plex Sans, Helvetica, Arial, sans-serif"
-FONT_MONO = "IBM Plex Mono, monospace"
+FONT_DISPLAY = '"Plus Jakarta Sans", sans-serif'
+FONT_SANS = '"IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+FONT_MONO = '"IBM Plex Mono", Consolas, monospace'
 
 GENOTYPE_SHADE_OFFSETS = [0, -22, 24, -40, 42, -55, 14, -10, 30, -30]
 
@@ -50,15 +51,13 @@ def shade(hex_color, percent):
 
 
 def sequential_scale(hex_color):
-    """5-stop sequential ramp for choropleths/heatmaps on a dark basemap:
-    low values fade toward the background, high values glow at full/peak
-    saturation, rather than fading to white as a light-theme scale would."""
+    """5-stop sequential ramp for choropleths/heatmaps on a light basemap."""
     return [
-        [0.0, shade(hex_color, -75)],
-        [0.25, shade(hex_color, -45)],
-        [0.5, shade(hex_color, -15)],
+        [0.0, "#F1F5F9"],
+        [0.25, shade(hex_color, 65)],
+        [0.5, shade(hex_color, 35)],
         [0.75, hex_color],
-        [1.0, shade(hex_color, 15)],
+        [1.0, shade(hex_color, -20)],
     ]
 
 
@@ -73,37 +72,41 @@ def rgb_to_hex(rgb):
     return '#' + ''.join('{:02x}'.format(max(0, min(255, int(round(x * 255.0))))) for x in rgb)
 
 
+_GOLDEN_ANGLE = 0.6180339887  # fraction of a full turn
+
+
+def _distinct_hue_colors(n, s=0.75, l=0.45, hue_start=0.58):
+    """Generate n colors stepped around the color wheel by the golden angle,
+    tuned for visibility on the light panel background."""
+    colors = []
+    for i in range(n):
+        h = (hue_start + i * _GOLDEN_ANGLE) % 1.0
+        r, g, b = colorsys.hls_to_rgb(h, l, s)
+        colors.append(rgb_to_hex((r, g, b)))
+    return colors
+
+
+# Fixed, order-independent assignment so a given genotype letter/number always
+# gets the same color across pages and re-renders.
+_GENOTYPE_KEY_ORDER = list("ABCDEFGHIJKLMNOP") + [str(i) for i in range(1, 9)]
+_GENOTYPE_COLOR_LOOKUP = dict(
+    zip(_GENOTYPE_KEY_ORDER, _distinct_hue_colors(len(_GENOTYPE_KEY_ORDER)))
+)
+
+
 def genotype_palette(prefix, base_hex, keys):
     """Builds {"<PREFIX>-<key>": color, ..., "Recombinant": color} where each
-    genotype maps to a universal, highly distinct color palette. This ensures
-    genotypes are easily differentiable and consistent across all viruses."""
+    genotype maps to a universal, highly distinct color palette."""
     palette = {}
-    
-    universal_map = {
-        "A": "#3B82F6", "B": "#F59E0B", "C": "#EF4444", "D": "#8B5CF6",
-        "E": "#10B981", "F": "#EC4899", "G": "#2D9CDB", "H": "#00D4AA",
-        "I": "#F5A623", "J": "#E84057",
-        "1": "#3B82F6", "2": "#F59E0B", "3": "#EF4444", "4": "#8B5CF6",
-        "5": "#10B981", "6": "#EC4899", "7": "#2D9CDB", "8": "#00D4AA"
-    }
-    
-    fallback_colors = [
-        "#3B82F6", "#F59E0B", "#EF4444", "#8B5CF6",
-        "#10B981", "#EC4899", "#2D9CDB", "#00D4AA",
-        "#F5A623", "#E84057"
-    ]
-    
+    fallback_colors = _distinct_hue_colors(max(len(keys), 8))
+
     for i, key in enumerate(keys):
         suffix = key.split('-')[-1]
         base_char = suffix[0].upper() if suffix else ""
-        
-        if base_char in universal_map:
-            color = universal_map[base_char]
-        else:
-            color = fallback_colors[i % len(fallback_colors)]
-            
+
+        color = _GENOTYPE_COLOR_LOOKUP.get(base_char, fallback_colors[i % len(fallback_colors)])
         palette[f"{prefix}-{key}"] = color
-        
+
     palette["Recombinant"] = VIRUS_COLORS["RECOMBINANT"]
     return palette
 
@@ -113,7 +116,7 @@ def genotype_palette(prefix, base_hex, keys):
 # ---------------------------------------------------------------------------
 TABLE_CELL_STYLE = {
     "textAlign": "left",
-    "padding": "10px",
+    "padding": "12px 14px",
     "overflow": "hidden",
     "textOverflow": "ellipsis",
     "maxWidth": 0,
@@ -127,17 +130,18 @@ TABLE_CELL_STYLE = {
 TABLE_HEADER_STYLE = {
     "backgroundColor": PANEL_2,
     "color": TEXT,
-    "fontWeight": "bold",
-    "fontFamily": FONT_MONO,
-    "fontSize": "12px",
+    "fontWeight": "700",
+    "fontFamily": FONT_SANS,
+    "fontSize": "11px",
     "textTransform": "uppercase",
-    "letterSpacing": "0.04em",
+    "letterSpacing": "0.06em",
     "border": f"1px solid {BORDER}",
+    "padding": "12px 14px",
 }
 
 TABLE_ODD_ROW_STYLE = {
     "if": {"row_index": "odd"},
-    "backgroundColor": PANEL_2,
+    "backgroundColor": "#F8FAFC",
 }
 
 
@@ -145,60 +149,127 @@ TABLE_ODD_ROW_STYLE = {
 # PLOTLY TEMPLATE
 # ---------------------------------------------------------------------------
 def register_theme():
-    """Registers the 'hep_dark' Plotly template and makes it the default."""
+    """Registers the 'hep_dark' Plotly template (configured for light background) and makes it default."""
     template = go.layout.Template(
         layout=go.Layout(
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             font=dict(family=FONT_SANS, color=TEXT_DIM, size=12),
-            title=dict(font=dict(family=FONT_SANS, color=TEXT, size=16)),
+            title=dict(font=dict(family=FONT_DISPLAY, color=TEXT, size=16, weight="bold")),
             colorway=[
                 VIRUS_COLORS["HBV"],
                 VIRUS_COLORS["HCV"],
                 VIRUS_COLORS["HEV"],
                 VIRUS_COLORS["HAV"],
                 VIRUS_COLORS["HDV"],
-                "#4FAEFF",
-                "#FF6B9D",
-                "#FFD166",
+                "#2563EB",
+                "#DB2777",
+                "#D97706",
             ],
             xaxis=dict(
-                gridcolor="rgba(255,255,255,0.04)",
-                linecolor="rgba(255,255,255,0.22)",
-                zerolinecolor="rgba(255,255,255,0.15)",
-                tickfont=dict(family=FONT_MONO, color=TEXT_DIM, size=11),
-                title=dict(font=dict(family=FONT_SANS, color=TEXT_DIM)),
+                gridcolor="rgba(15,23,42,0.05)",
+                linecolor="rgba(15,23,42,0.18)",
+                zerolinecolor="rgba(15,23,42,0.12)",
+                tickfont=dict(family=FONT_SANS, color=TEXT_DIM, size=11),
+                title=dict(font=dict(family=FONT_SANS, color=TEXT_DIM, size=12, weight=600)),
             ),
             yaxis=dict(
-                gridcolor="rgba(255,255,255,0.04)",
-                linecolor="rgba(255,255,255,0.22)",
-                zerolinecolor="rgba(255,255,255,0.15)",
-                tickfont=dict(family=FONT_MONO, color=TEXT_DIM, size=11),
-                title=dict(font=dict(family=FONT_SANS, color=TEXT_DIM)),
+                gridcolor="rgba(15,23,42,0.05)",
+                linecolor="rgba(15,23,42,0.18)",
+                zerolinecolor="rgba(15,23,42,0.12)",
+                tickfont=dict(family=FONT_SANS, color=TEXT_DIM, size=11),
+                title=dict(font=dict(family=FONT_SANS, color=TEXT_DIM, size=12, weight=600)),
             ),
             legend=dict(
                 font=dict(family=FONT_SANS, color=TEXT_DIM, size=11),
                 bgcolor="rgba(0,0,0,0)",
             ),
             hoverlabel=dict(
-                bgcolor=PANEL_2,
-                bordercolor=BORDER,
-                font=dict(family=FONT_MONO, color=TEXT, size=12),
+                bgcolor="#0F172A",
+                bordercolor="rgba(255,255,255,0.1)",
+                font=dict(family=FONT_SANS, color="#FFFFFF", size=12),
             ),
             geo=dict(
                 bgcolor="rgba(0,0,0,0)",
-                lakecolor="#07111A",
-                landcolor="#101E2B",
+                lakecolor="#E2E8F0",
+                landcolor="#F1F5F9",
                 showland=True,
                 showframe=False,
                 showcoastlines=True,
-                coastlinecolor="rgba(255,255,255,0.08)",
-                countrycolor="rgba(255,255,255,0.06)",
+                coastlinecolor="rgba(15,23,42,0.12)",
+                countrycolor="rgba(15,23,42,0.06)",
                 showocean=True,
-                oceancolor="#07111A",
+                oceancolor="#E2E8F0",
             ),
-            coloraxis=dict(colorbar=dict(tickfont=dict(family=FONT_MONO, color=TEXT_DIM))),
+            coloraxis=dict(colorbar=dict(tickfont=dict(family=FONT_SANS, color=TEXT_DIM))),
         )
     )
     pio.templates["hep_dark"] = template
     pio.templates.default = "hep_dark"
+
+
+# ---------------------------------------------------------------------------
+# CENTRALIZED PLOTLY FIGURE TYPOGRAPHY & THEME HELPER
+# ---------------------------------------------------------------------------
+HEP_PLOT_FONT = dict(
+    family="IBM Plex Sans, sans-serif",
+    size=12,
+    color="#475569",
+)
+
+HEP_TITLE_FONT = dict(
+    family="Plus Jakarta Sans, sans-serif",
+    size=16,
+    color="#0F172A",
+)
+
+HEP_AXIS_TITLE_FONT = dict(
+    family="IBM Plex Sans, sans-serif",
+    size=12,
+    color="#475569",
+)
+
+HEP_TICK_FONT = dict(
+    family="IBM Plex Sans, sans-serif",
+    size=11,
+    color="#64748B",
+)
+
+HEP_LEGEND_FONT = dict(
+    family="IBM Plex Sans, sans-serif",
+    size=11,
+    color="#475569",
+)
+
+
+def apply_heptracker_figure_style(fig):
+    """Applies standardized HepTracker typography, grid, margin, and background styling to any Plotly figure."""
+    if fig is None:
+        return fig
+
+    fig.update_layout(
+        font=HEP_PLOT_FONT,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(
+            font=HEP_LEGEND_FONT,
+            title_font=HEP_LEGEND_FONT,
+        ),
+    )
+
+    fig.update_xaxes(
+        title_font=HEP_AXIS_TITLE_FONT,
+        tickfont=HEP_TICK_FONT,
+        gridcolor="#E2E8F0",
+        linecolor="#CBD5E1",
+    )
+
+    fig.update_yaxes(
+        title_font=HEP_AXIS_TITLE_FONT,
+        tickfont=HEP_TICK_FONT,
+        gridcolor="#E2E8F0",
+        linecolor="#CBD5E1",
+    )
+
+    return fig
+

@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   dashboard:
     build: .
-    platform: linux/amd64
     container_name: hepatitis-dashboard
     ports:
-      - "80:8051"  # Maps port 80 (HTTP) on the host to port 8051 in the container
+      - "8051:8051" # Default dashboard port
+      - "80:8051"   # HTTP host port
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock  # Mounts the Docker socket for Docker-out-of-Docker sibling containers (GLUE)
       - ./results:/app/results                      # Maps preprocessed metadata and alignments from host

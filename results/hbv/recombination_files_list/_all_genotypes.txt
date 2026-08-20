@@ -1,0 +1,10 @@
+Genotype D
+Genotype C
+Genotype B
+Genotype G
+Genotype A
+Genotype F
+Genotype E
+Genotype I
+Genotype H
+Genotype J

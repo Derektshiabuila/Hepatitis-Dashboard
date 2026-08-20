@@ -1,0 +1,8 @@
+Genotype 3
+Genotype 1
+Genotype 2
+Genotype 4
+Genotype 6
+Genotype unknown
+Genotype 5
+Genotype 7

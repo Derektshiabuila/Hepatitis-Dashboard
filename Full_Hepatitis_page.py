@@ -28,8 +28,11 @@ app = dash.Dash(
     __name__,
     server=server,  # Use our Flask app
     use_pages=True,
-    external_stylesheets=[dbc.themes.BOOTSTRAP,
-    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"],
+    external_stylesheets=[
+        dbc.themes.BOOTSTRAP,
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
+        "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+    ],
     suppress_callback_exceptions=True,
 )
 
@@ -40,7 +43,16 @@ def global_sidebar():
     brand = html.Div(
         className="hep-sidebar-brand",
         children=[
-            html.Div(html.I(className="fa-solid fa-dna"), className="hep-brand-icon"),
+            html.Div(
+                html.Img(
+                    src="/assets/Hepatitis_genome2.jpg",
+                    alt="HepTracker Logo",
+                    className="w-100 h-100 rounded-3",
+                    style={"objectFit": "cover"}
+                ),
+                className="hep-brand-icon p-1 rounded-3 overflow-hidden d-flex align-items-center justify-content-center",
+                style={"width": "42px", "height": "42px"}
+            ),
             html.Div([
                 html.Div("HepTracker", className="hep-brand-title"),
                 html.Div("GENOMICS DASHBOARD", className="hep-brand-subtitle"),
@@ -52,7 +64,7 @@ def global_sidebar():
     tools_section = html.Div(
         className="hep-sidebar-section",
         children=[
-            html.Div("Dashboard tools:", className="hep-sidebar-label"),
+            html.Div("Dashboard tools", className="hep-sidebar-label"),
             dbc.Button(
                 [html.I(className="fa-solid fa-table-cells-large hep-nav-icon"), html.Span("Overview")],
                 id="tab-overview",
@@ -88,7 +100,7 @@ def global_sidebar():
     virus_section = html.Div(
         className="hep-virus-panel",
         children=[
-            html.Div("Virus selector:", className="hep-sidebar-label"),
+            html.Div("Virus selector", className="hep-sidebar-label"),
             html.Div(
                 [html.Span(className="hep-dot hep-dot-a"), html.Span("Hepatitis A")],
                 className="hep-virus-item hep-virus-disabled",
@@ -126,7 +138,7 @@ def global_sidebar():
         className="hep-sidebar-section",
         style={"borderTop": "1px solid var(--border)", "paddingTop": "15px"},
         children=[
-            html.Div("Pages:", className="hep-sidebar-label"),
+            html.Div("Pages", className="hep-sidebar-label"),
             dcc.Link(
                 [html.I(className="fa-solid fa-gauge hep-nav-icon"), html.Span("Dashboard")],
                 id="link-dashboard",
@@ -172,36 +184,13 @@ app.layout = html.Div(
         dcc.Store(id="dashboard-active-page-store", data=True),
         dcc.Store(id="active-tab-store", data="overview"),
         
-        # Mobile top header (only visible on mobile/tablet)
         html.Div(
-            className="mobile-header d-flex d-md-none align-items-center justify-content-between p-3",
+            className="app-shell-layout w-100 p-0 m-0",
             children=[
-                dbc.Button(
-                    html.I(className="fa-solid fa-bars"),
-                    id="mobile-sidebar-toggle",
-                    color="link",
-                    className="text-white fs-3 p-0",
-                ),
-                html.Div(
-                    "HepTracker",
-                    className="fw-bold fs-4 text-white",
-                    style={"fontFamily": "var(--serif)"}
-                ),
-                html.Div(style={"width": "30px"}), # Spacer to center
-            ]
-        ),
-        
-        # Sidebar Backdrop (for closing sidebar on tap on mobile)
-        html.Div(id="sidebar-backdrop", className="sidebar-backdrop"),
-
-        html.Div(
-            className="app-shell-layout",
-            children=[
-                global_sidebar(),
                 html.Div(
                     dash.page_container,
                     id="page-content-wrapper",
-                    className="hep-main-content",
+                    className="hep-main-content w-100 p-0 m-0",
                 ),
             ]
         ),
@@ -230,69 +219,10 @@ app.layout = html.Div(
             is_open=False,
         ),
     ],
-    className="app-shell",
+    className="app-shell bg-light",
 )
 
-#Global Navigation redirects
-@app.callback(
-    Output("url", "pathname"),
-    Input("tab-overview", "n_clicks"),
-    Input("tab-mutations", "n_clicks"),
-    Input("tab-epidemiology", "n_clicks"),
-    Input("tab-user-seq", "n_clicks"),
-    Input("btn-hbv", "n_clicks"),
-    Input("btn-hcv", "n_clicks"),
-    Input("btn-hev", "n_clicks"),
-    State("url", "pathname"),
-    prevent_initial_call=True
-)
-def redirect_to_dashboard(*args):
-    current_path = args[-1]
-    if current_path not in ["/", "/dashboard"]:
-        return "/dashboard"
-    return dash.no_update
 
-# Toggle mobile sidebar class
-@app.callback(
-    Output("sidebar-container", "className"),
-    Input("mobile-sidebar-toggle", "n_clicks"),
-    Input("sidebar-backdrop", "n_clicks"),
-    Input("url", "pathname"),
-    State("sidebar-container", "className"),
-    prevent_initial_call=True
-)
-def toggle_sidebar_class(n_clicks_toggle, n_clicks_backdrop, pathname, current_className):
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        return "hep-sidebar"
-    
-    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    
-    if trigger_id in ["mobile-sidebar-toggle", "sidebar-backdrop"]:
-        if "mobile-open" in current_className:
-            return "hep-sidebar"
-        else:
-            return "hep-sidebar mobile-open"
-            
-    return "hep-sidebar"
-
-# Highlight active Page links in sidebar
-@app.callback(
-    Output("link-dashboard", "className"),
-    Output("link-about", "className"),
-    Output("link-resources", "className"),
-    Output("link-contact", "className"),
-    Input("url", "pathname")
-)
-def update_sidebar_active_links(pathname):
-    base_class = "hep-page-link hep-nav-item btn"
-    active_class = "hep-page-link hep-nav-item btn hep-page-active"
-    return (
-        active_class if pathname in ["/", "/dashboard"] else base_class,
-        active_class if pathname == "/about" else base_class,
-        active_class if pathname == "/resources" else base_class,
-        active_class if pathname == "/contact" else base_class,
-    )
 
 app.server.config["DATA_STORE"] = load_and_preprocess_data()
 

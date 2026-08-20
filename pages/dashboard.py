@@ -19,7 +19,8 @@ import plotly.io as pio
 from hep_theme import (
     VIRUS_COLORS, sequential_scale, genotype_palette,
     TABLE_HEADER_STYLE, TABLE_CELL_STYLE, TABLE_ODD_ROW_STYLE,
-    register_theme, shade,
+    register_theme, shade, _distinct_hue_colors, _GENOTYPE_COLOR_LOOKUP,
+    apply_heptracker_figure_style,
 )
 register_theme()
 
@@ -58,6 +59,19 @@ coverage_colorscale = [
     [1.0, "#d73027"]    # Dark green (highest coverage)
 ]
 
+def _stepped_colorscale(colors):
+    """Build a Plotly colorscale with hard edges between N colors (no blending),
+    so each bin renders as a solid block instead of a gradient — matches the
+    reference legend style rather than Plotly's default smooth interpolation."""
+    n = len(colors)
+    scale = []
+    for i, c in enumerate(colors):
+        scale.append([i / n, c])
+        scale.append([(i + 1) / n, c])
+    return scale
+
+SEQUENCE_COUNT_COLORS = ["#EAF2FB", "#C3DBF2", "#9AC2E8", "#6FA8DC", "#3D7FC4", "#1F5FA8", "#123F73", "#0A2647"]
+SEQUENCE_COUNT_STEPPED_COLORSCALE = _stepped_colorscale(SEQUENCE_COUNT_COLORS)
 
 # Initialize data store (will be loaded on first access)
 data_store = None
@@ -441,7 +455,7 @@ def ihme_latest_by_country(ihme_df, virus, measure_metric, sex, regions=None, co
     cause_filter = cause_lookup.get((virus or "HBV").upper(), "")
     
     # Check if cause exists
-    if cause_filter not in ihme_df["cause"].values:
+    if ihme_df is None or ihme_df.empty or "cause" not in ihme_df.columns or cause_filter not in ihme_df["cause"].values:
         return pd.DataFrame(columns=["Country_standard", "Metric_raw", "Metric", "year"])
 
     # Handle "Both" sexes by getting Male and Female separately
@@ -586,6 +600,8 @@ def _enrich_mutation_df(mutation_df, sequence_df):
     Enrich mutation dataframe with sequence-level metadata.
     Requires a stable 'ID' column for joining.
     """
+    if mutation_df is None or mutation_df.empty or sequence_df is None or sequence_df.empty:
+        return pd.DataFrame()
 
     # --- Defensive copy (CRITICAL to avoid UnboundLocalError) ---
     mut = mutation_df.copy()
@@ -597,17 +613,14 @@ def _enrich_mutation_df(mutation_df, sequence_df):
         elif "Taxa" in mut.columns:
             mut["ID"] = mut["Taxa"]
         else:
-            raise KeyError(
-                "Mutation DF has no ID/sample/Taxa to join on. Columns: "
-                f"{mut.columns.tolist()}"
-            )
+            return pd.DataFrame()
 
     # --- Normalize ID just in case ---
     mut["ID"] = mut["ID"].astype(str).str.strip()
 
     # --- Ensure sequence_df has ID ---
     if "ID" not in sequence_df.columns:
-        raise KeyError("Sequence DF has no ID column")
+        return pd.DataFrame()
 
     seq = sequence_df.copy()
     seq["ID"] = seq["ID"].astype(str).str.strip()
@@ -704,6 +717,32 @@ def _mutations_heading(virus, years_text, filters_text, has_filters):
     prefix = "HBV resistance mutations" if v == "HBV" else "HCV mutations"
     facet  = "drug" if v == "HBV" else "gene"
     return f"{prefix} by {facet} — {filters_text} · {years_text} ({scope})"
+    
+def _label_declutter(fig, xs, ys, labels, top_n=14, min_gap_frac=0.04, y_key=None):
+    """Label only the most notable points on a scatter, greedily skipping any
+    candidate whose x sits too close to an already-placed label. Alternates
+    label direction (up/down) to further reduce collisions. Avoids Plotly's
+    lack of built-in text-collision handling, which otherwise stacks labels
+    unreadably in dense clusters."""
+    if not xs:
+        return
+    x_range = max(xs) - min(xs) or 1
+    min_gap = x_range * min_gap_frac
+    order = sorted(range(len(xs)), key=lambda i: -(y_key(i) if y_key else ys[i]))
+    placed_x = []
+    for rank, i in enumerate(order[:top_n * 3]):  # scan a bit beyond top_n to allow skips
+        if len(placed_x) >= top_n:
+            break
+        if any(abs(xs[i] - px) < min_gap for px in placed_x):
+            continue
+        placed_x.append(xs[i])
+        fig.add_annotation(
+            x=xs[i], y=ys[i], text=labels[i], showarrow=True,
+            arrowhead=0, arrowsize=0.6, arrowwidth=1, arrowcolor="rgba(100,116,139,0.6)",
+            ax=0, ay=-22 if len(placed_x) % 2 == 0 else 22,
+            font=dict(size=9, color="#334155"),
+            bgcolor="rgba(255,255,255,0.85)",
+        )
 
 def calculate_global_mutation_maximum():
     data = get_data_store()
@@ -741,13 +780,94 @@ def calculate_global_mutation_maximum():
     global_max = min(100, np.ceil(max_percentage / 10) * 10 + 10) if max_percentage > 0 else 50
     return global_max
 
+
+def _add_single_box_legend(fig: go.Figure, colors: list[str], labels: list[str], x: float = 0.01, y: float = 0.02):
+    """Add discrete single box swatches without legend headings to bottom-left corner of world map."""
+    for color, label in zip(colors, labels):
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None],
+            mode="markers",
+            marker=dict(
+                symbol="square",
+                size=12,
+                color=color,
+                line=dict(width=1, color="rgba(15, 23, 42, 0.4)")
+            ),
+            name=str(label),
+            showlegend=True
+        ))
+    
+    fig.update_layout(
+        showlegend=True,
+        xaxis=dict(visible=False, showgrid=False, zeroline=False),
+        yaxis=dict(visible=False, showgrid=False, zeroline=False),
+        legend=dict(
+            title=dict(text=""),  # No legend title / heading as requested
+            orientation="v",       # Vertical stacked single boxes
+            x=x, xanchor="left",
+            y=y, yanchor="bottom",
+            bgcolor="rgba(255, 255, 255, 0.92)",
+            bordercolor="rgba(15, 23, 42, 0.15)",
+            borderwidth=1,
+            font=dict(family="IBM Plex Sans, sans-serif", size=10, color="#1e293b"),
+            itemsizing="constant",
+            traceorder="normal"
+        )
+    )
+
+
+def _bin_continuous_series(z_series, is_pct=False, max_bins=5):
+    """Bin continuous numerical data into discrete steps for single box legend rendering."""
+    s = pd.Series(z_series).dropna()
+    s_pos = s[s > 0]
+    if s_pos.empty:
+        return pd.Series(index=z_series.index, dtype=float), [], []
+    
+    num_bins = min(max_bins, max(1, len(s_pos.unique())))
+    if num_bins == 1:
+        val = s_pos.iloc[0]
+        lbl = f"{val:.1f}%" if is_pct else f"{val:,.0f}"
+        return pd.Series(0, index=s.index), [SEQUENCE_COUNT_COLORS[0]], [lbl]
+    
+    ranks = s_pos.rank(method="first")
+    bins = pd.qcut(ranks, q=num_bins, labels=False, duplicates="drop")
+    
+    color_indices = [int(i * (len(SEQUENCE_COUNT_COLORS) - 1) / max(1, num_bins - 1)) for i in range(num_bins)]
+    step_colors = [SEQUENCE_COUNT_COLORS[idx] for idx in color_indices]
+    
+    def _fmt_short(num):
+        if is_pct:
+            return f"{num:.1f}%"
+        if num >= 1_000_000:
+            val = num / 1_000_000
+            return f"{val:.1f}M" if val % 1 != 0 else f"{int(val)}M"
+        if num >= 1_000:
+            val = num / 1_000
+            return f"{val:.1f}k" if val % 1 != 0 else f"{int(val)}k"
+        return f"{int(num):,}"
+
+    tick_labels = []
+    for b in range(num_bins):
+        sub = s_pos[bins == b]
+        if not sub.empty:
+            low, high = sub.min(), sub.max()
+            low_str, high_str = _fmt_short(low), _fmt_short(high)
+            lbl = low_str if low_str == high_str else f"{low_str} – {high_str}"
+            tick_labels.append(lbl)
+        else:
+            tick_labels.append(f"Bin {b+1}")
+            
+    return bins, step_colors, tick_labels
+
+
 def create_world_map(
     country_data: pd.DataFrame, 
     country_genotype_counts: pd.DataFrame, 
     coord_lookup: dict[str, dict[str, float]], 
     virus_type: str = "HBV", 
     display_mode: str = "raw",  # "raw", "PerMillion", or "ihme"
-    map_title: str = ""  # Add this to know what metric we're showing
+    map_title: str = "",  # Add this to know what metric we're showing
+    height: int = 480
 ) -> go.Figure:
     
     if virus_type == "HBV":
@@ -829,11 +949,11 @@ def create_world_map(
         # Use appropriate color scale based on virus type
         
         if virus_type == "HBV":
-            colorscale = coverage_colorscale
+            colorscale = SEQUENCE_COUNT_STEPPED_COLORSCALE
         elif virus_type == "HCV":
-            colorscale = coverage_colorscale
+            colorscale = SEQUENCE_COUNT_STEPPED_COLORSCALE
         else:
-            colorscale = coverage_colorscale
+            colorscale = SEQUENCE_COUNT_STEPPED_COLORSCALE
         
         # Determine colorbar title from map_title
         if "Prevalence" in map_title:
@@ -845,11 +965,11 @@ def create_world_map(
         else:
             colorbar_title = "Value (Log10)"
         
-        # Generate ticks for colorbar
-        tick_min = int(np.floor(vmin))
-        tick_max = int(np.ceil(vmax))
-        tick_vals = list(range(tick_min, tick_max + 1))
-        tick_text = [f"10^{x}" for x in tick_vals]
+        # Bin continuous values for single-box legend
+        bins, step_colors, tick_labels = _bin_continuous_series(
+            valid_nonzero["Metric_raw"],
+            is_pct=("rate" in map_title.lower() or "prevalence" in map_title.lower())
+        )
         
         fig.add_trace(
             go.Choropleth(
@@ -858,14 +978,8 @@ def create_world_map(
                 z=valid_nonzero["log_value"],
                 zmin=vmin,
                 zmax=vmax,
-                colorscale=colorscale,
-                colorbar=dict(
-                    title=colorbar_title,
-                    len=0.6,
-                    thickness=20,
-                    tickvals=tick_vals,
-                    ticktext=tick_text,
-                ),
+                colorscale=SEQUENCE_COUNT_STEPPED_COLORSCALE,
+                showscale=False,
                 marker_line_color="rgba(0,0,0,0.3)",
                 marker_line_width=0.5,
                 hovertemplate=(
@@ -876,47 +990,43 @@ def create_world_map(
                 customdata=valid_nonzero["Metric_raw"].values,
             )
         )
+        _add_single_box_legend(fig, step_colors, tick_labels)
     
     # PER MILLION MODE
     elif display_mode == "PerMillion":
-        # [Keep existing PerMillion code as is]
-        z_vals = (
-            valid["Metric_raw"].apply(lambda x: np.log10(x) if (pd.notna(x) and x > 0) else np.nan)
-            .astype(float)
-            .to_numpy()
-        )
-        if np.all(np.isnan(z_vals)):
-            return _empty_world("No per‑million values available for current filters")
-        vmin = float(np.nanmin(z_vals)) if np.isfinite(np.nanmin(z_vals)) else -5.0
-        vmax = float(np.nanmax(z_vals)) if np.isfinite(np.nanmax(z_vals)) else 0.0
+        bins_pm = [0, 0.01, 0.1, 1, 10, 100, 1000, 10000, float("inf")]
+        labels_pm = ["0", "<0.1", "0.1–1", "1–10", "10–100", "100–1K", "1K–10K", "10K+"]
+        valid["bin_pm"] = pd.cut(valid["Metric_raw"], bins=bins_pm, labels=labels_pm, include_lowest=True, right=False)
+        bin_to_idx_pm = {lab: i for i, lab in enumerate(labels_pm)}
+        valid["z_value_pm"] = valid["bin_pm"].map(bin_to_idx_pm)
 
-
-        if virus_type == "HBV":
-            colorscale = coverage_colorscale
-        elif virus_type == "HCV":
-            colorscale = coverage_colorscale
-        else:
-            colorscale = coverage_colorscale
+        nonzero = valid[valid["Metric_raw"] > 0].copy()
+        driving = nonzero if not nonzero.empty else valid
+        z_numeric = driving["z_value_pm"].astype(float).to_numpy()
+        locations = driving["Country_standard"]
 
         fig.add_trace(
             go.Choropleth(
-                locations=valid["Country_standard"],
+                locations=locations,
                 locationmode="country names",
-                z=z_vals,
-                zmin=vmin,
-                zmax=vmax,
-                colorscale=colorscale,
-                colorbar_title="Log10 per million",
+                z=z_numeric,
+                zmin=0,
+                zmax=len(labels_pm) - 1,
+                colorscale=SEQUENCE_COUNT_STEPPED_COLORSCALE,
+                showscale=False,
                 marker_line_color="rgba(0,0,0,0.3)",
                 marker_line_width=0.5,
-                hovertemplate="<b>%{location}</b><br>Per million: %{customdata:.2f}<extra></extra>",
-                customdata=valid["Metric_raw"].astype(float),
+                hovertext=driving.apply(
+                    lambda r: f"<b>{r['Country_standard']}</b><br>Per million: {float(r['Metric_raw']):,.2f}<br>Range: {r['bin_pm']}",
+                    axis=1,
+                ),
+                hoverinfo="text",
             )
         )
+        _add_single_box_legend(fig, SEQUENCE_COUNT_COLORS, labels_pm)
     
     # RAW COUNTS MODE (default)
     else:
-        # [Keep existing raw counts code as is]
         bins = [0, 1, 5, 20, 100, 500, 2000, 4000, float("inf")]
         labels = ["0", "1–4", "5–19", "20–99", "100–499", "500–1,999", "2,000–3,999", "4,000+"]
         valid["bin"] = pd.cut(valid["Metric_raw"], bins=bins, labels=labels, include_lowest=True, right=False)
@@ -928,13 +1038,7 @@ def create_world_map(
         z_numeric = driving["z_value"].astype(float).to_numpy()
         locations = driving["Country_standard"]
 
-        HCV_COLORS = ["#FFF7BC", "#FEE391", "#FEC44F", "#FE9929", "#EC7014", "#CC4C02", "#993404", "#662506"]
-        HBV_COLORS = ["#F7FCF0", "#E0F3DB", "#A8DDB5", "#4EB3D3", "#2B8CBE", "#0868AC", "#084081", "#06214D"]
-        HEV_COLORS = ["#F7FCF0", "#E0F3DB", "#A8DDB5", "#4EB3D3", "#2B8CBE", "#0868AC", "#084081", "#06214D"]
-        
-        colorscale = coverage_colorscale
-        
-        #colorscale = [[i / (len(labels) - 1), c] for i, c in enumerate(colors)]
+        colorscale = SEQUENCE_COUNT_STEPPED_COLORSCALE
 
         fig.add_trace(
             go.Choropleth(
@@ -944,14 +1048,7 @@ def create_world_map(
                 zmin=0,
                 zmax=len(labels) - 1,
                 colorscale=colorscale,
-                showscale=True,
-                colorbar=dict(
-                    tickvals=list(range(len(labels))),
-                    ticktext=labels,
-                    title="Sequence count",
-                    len=0.6,
-                    thickness=20,
-                ),
+                showscale=False,
                 marker_line_color="rgba(0,0,0,0.3)",
                 marker_line_width=0.5,
                 hovertext=driving.apply(
@@ -961,6 +1058,7 @@ def create_world_map(
                 hoverinfo="text",
             )
         )
+        _add_single_box_legend(fig, SEQUENCE_COUNT_COLORS, labels)
 
     # genotype overlay markers (only show for sequence data, not IHME data)
     if display_mode != "ihme":
@@ -997,15 +1095,24 @@ def create_world_map(
 
     # Apply to all modes after traces so fitbounds works
     fig.update_geos(
-        projection_type="natural earth",
+        projection_type="equirectangular",
         showcountries=True,
         countrycolor="rgba(0,0,0,0.2)",
         showsubunits=True,
-        fitbounds="locations",
-        domain=dict(x=[0, 1], y=[0.2, 1]),
+        fitbounds=False,
+        showframe=False,
+        lataxis_range=[-65, 85],
+        domain=dict(x=[0, 1], y=[0, 1]),
     )
-    fig.update_layout(height=700, margin=dict(t=30, b=30, l=10, r=10))
-    return fig
+    fig.update_layout(
+        height=height,
+        margin=dict(t=0, b=0, l=0, r=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(visible=False, showgrid=False, zeroline=False),
+        yaxis=dict(visible=False, showgrid=False, zeroline=False),
+    )
+    return apply_heptracker_figure_style(fig)
     
 def create_coverage_map(
     cov_df: pd.DataFrame,
@@ -1014,10 +1121,12 @@ def create_coverage_map(
     virus_type: str = "HBV",
     who_regions: list[str] | None = None,
     countries: list[str] | None = None,
+    height: int = 480
 ) -> go.Figure:
     
     if cov_df is None or cov_df.empty:
         print("Warning: cov_df is empty")
+        return apply_heptracker_figure_style(_empty_world("No data available"))
         return _empty_world("No coverage data available")
     
     valid = cov_df.copy()
@@ -1058,76 +1167,52 @@ def create_coverage_map(
     if countries:
         valid = valid[valid["Country_standard"].isin(countries)]
     
-    # Remove rows with zero or missing coverage
-    plot_data = valid[valid["coverage_ratio"] > 0].copy()
+    # Filter valid positive numbers and drop NaNs
+    plot_data = valid.dropna(subset=["coverage_ratio"]).copy()
+    plot_data = plot_data[plot_data["coverage_ratio"] > 0].copy()
     
     if plot_data.empty:
         return _empty_world("No coverage ratio data available for selected filters")
     
-    # Calculate actual percentiles from the data
-    coverage_values = plot_data["coverage_ratio"].values
+    # Calculate quantile bins using rank-based qcut for 100% fail-safe execution
+    num_countries = len(plot_data)
+    num_bins = min(8, max(1, num_countries))
     
-    # Create meaningful bins based on actual distribution
-    # Use unique quantiles that actually exist in the data
-    unique_quantiles = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
-    bin_edges = np.quantile(coverage_values, unique_quantiles)
+    ranks = plot_data["coverage_ratio"].rank(method="first")
+    plot_data["coverage_bin"] = pd.qcut(ranks, q=num_bins, labels=False, duplicates="drop")
     
-    # Ensure bin edges are unique (if data is highly clustered)
-    bin_edges = np.unique(bin_edges)
-    if len(bin_edges) < 3:
-        # If data is extremely clustered, use linear spacing between min and max
-        bin_edges = np.linspace(coverage_values.min(), coverage_values.max(), 5)
+    max_bin = int(plot_data["coverage_bin"].max()) if not plot_data["coverage_bin"].isna().all() else 0
+    plot_data["z_value"] = plot_data["coverage_bin"].astype(float)
     
-    # Create color mapping based on bins
-    plot_data["coverage_bin"] = pd.cut(
-        plot_data["coverage_ratio"], 
-        bins=bin_edges, 
-        include_lowest=True,
-        labels=False
-    )
-    
-    # Normalize bin indices to 0-1 for colorscale
-    max_bin = plot_data["coverage_bin"].max()
-    plot_data["coverage_display"] = plot_data["coverage_bin"] / max_bin if max_bin > 0 else 0
-    
-    # Create tick labels showing actual percentage ranges
-    tick_positions = []
+    # Build tick labels dynamically from bin min/max values
+    tick_positions = list(range(max_bin + 1))
     tick_labels = []
     
-    for i in range(len(bin_edges) - 1):
-        low = bin_edges[i] * 100
-        high = bin_edges[i + 1] * 100
-        if i == len(bin_edges) - 2:
-            tick_labels.append(f"{low:.2f}% – {high:.2f}%")
+    for b in tick_positions:
+        bin_subset = plot_data[plot_data["coverage_bin"] == b]["coverage_ratio"]
+        if not bin_subset.empty:
+            low = bin_subset.min() * 100
+            high = bin_subset.max() * 100
+            if low == high:
+                tick_labels.append(f"{low:.1f}%")
+            else:
+                tick_labels.append(f"{low:.1f}%–{high:.1f}%")
         else:
-            tick_labels.append(f"{low:.2f}% – {high:.2f}%")
-        tick_positions.append(i / max_bin if max_bin > 0 else 0)
+            tick_labels.append(f"Bin {b+1}")
     
-    # Colorscale from red to green
-    coverage_colorscale = [
-        [0.0, "#1a9850"],   # Red (lowest coverage)
-        [0.25, "#d9ef8b"],
-        [0.5, "#fee08b"],
-        [0.75, "#fc8d59"],
-        [1.0, "#d73027"]    # Dark green (highest coverage)
-    ]
-    
+    color_indices = [int(i * (len(SEQUENCE_COUNT_COLORS) - 1) / max(1, len(tick_labels) - 1)) for i in range(len(tick_labels))]
+    step_colors = [SEQUENCE_COUNT_COLORS[idx] for idx in color_indices]
+
     fig = go.Figure()
     
     fig.add_trace(go.Choropleth(
         locations=plot_data["Country_standard"],
         locationmode="country names",
-        z=plot_data["coverage_display"],
+        z=plot_data["z_value"],
         zmin=0,
-        zmax=1,
-        colorscale=coverage_colorscale,
-        colorbar=dict(
-            title="Coverage Ratio",
-            len=0.6,
-            thickness=20,
-            tickvals=tick_positions,
-            ticktext=tick_labels
-        ),
+        zmax=len(tick_labels) - 1,
+        colorscale=SEQUENCE_COUNT_STEPPED_COLORSCALE,
+        showscale=False,
         marker_line_color="rgba(0,0,0,0.3)",
         marker_line_width=0.5,
         hovertemplate=(
@@ -1145,25 +1230,32 @@ def create_coverage_map(
             plot_data["observed_sequences"].values,
             plot_data["expected_sequences"].values,
             plot_data["coverage_gap"].values,
-            plot_data["coverage_bin"].apply(lambda x: f"Bin {int(x)+1}/{int(max_bin)+1}").values
+            plot_data["coverage_bin"].apply(lambda x: f"Bin {int(x)+1}/{int(max_bin)+1}" if pd.notna(x) else "N/A").values
         ], axis=1)
     ))
     
+    _add_single_box_legend(fig, step_colors, tick_labels)
+    
     fig.update_geos(
-        projection_type="natural earth",
+        projection_type="equirectangular",
         showcountries=True,
         countrycolor="rgba(0,0,0,0.2)",
         showsubunits=True,
-        fitbounds="locations",
-        domain=dict(x=[0, 1], y=[0.2, 1]),
+        fitbounds=False,
+        showframe=False,
+        lataxis_range=[-65, 85],
+        domain=dict(x=[0, 1], y=[0, 1]),
     )
     fig.update_layout(
-        height=700, 
-        margin=dict(t=30, b=30, l=10, r=10),
-        title=dict(text=f"{virus_type} Sequencing Coverage Map (Relative Ranking)", font=dict(size=16))
+        height=height,
+        margin=dict(t=0, b=0, l=0, r=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(visible=False, showgrid=False, zeroline=False),
+        yaxis=dict(visible=False, showgrid=False, zeroline=False),
     )
     
-    return fig
+    return apply_heptracker_figure_style(fig)
     
 def get_clean_log_axis(ymin, ymax, is_per_million=False):
     """
@@ -1297,7 +1389,7 @@ def make_line_trend(
         color="genotype",
         color_discrete_map=genotype_colors,
         markers=True,
-        line_shape="spline",
+        line_shape="linear",
     )
 
     fig.update_traces(
@@ -1536,6 +1628,7 @@ def make_genotype_bar(
     # Hover text
     unit = " per million" if y_col == "PerMillion" else ""
     bar_fig.update_traces(
+        marker_cornerradius=6,
         hovertemplate="<b>%{x}</b><br>%{y:,}" + unit + " sequences<extra></extra>"
     )
 
@@ -1748,6 +1841,7 @@ def make_mutation_bar(
         color_discrete_sequence=[color],
     )
     fig.update_traces(
+        marker_cornerradius=6,
         hovertemplate="<b>%{x}</b><br>Percentage: %{y:.1f}%<br>"
                       "Count: %{customdata[0]}<br>"
                       "Total sequences: %{customdata[1]}<extra></extra>",
@@ -2238,34 +2332,47 @@ def create_mutation_timeline(mutation_df, sequence_df, selected_virus, top_mutat
     timeline_data = timeline_data.merge(yearly_totals, on="Year", how="left")
     timeline_data["prevalence_pct"] = (timeline_data["count"] / timeline_data["total_sequences"]) * 100
     
-    fig = px.scatter(timeline_data, 
-                     x="Year", 
-                     y="prevalence_pct",
-                     color="mutation",
-                     size="count",
-                     hover_data={"count": True, "prevalence_pct": ":.2f"})
-    
-    # Add lines connecting the points
-    for mutation in top_muts:
-        mutation_data = timeline_data[timeline_data["mutation"] == mutation]
-        fig.add_trace(go.Scatter(
-            x=mutation_data["Year"],
-            y=mutation_data["prevalence_pct"],
-            mode='lines',
-            line=dict(width=1, color='lightgray'),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
-    
+    timeline_data = timeline_data.sort_values(["mutation", "Year"])
+
+    fig = px.line(
+        timeline_data,
+        x="Year",
+        y="prevalence_pct",
+        color="mutation",
+        markers=True,
+        hover_data={"count": True, "prevalence_pct": ":.2f"},
+    )
+
+    # Scale marker size by sample count (per mutation, so each trace's own
+    # min/max sets its point sizes) instead of a single flat gray line
+    # underneath differently-colored dots.
+    for trace in fig.data:
+        mutation_counts = timeline_data.loc[
+            timeline_data["mutation"] == trace.name, "count"
+        ]
+        if mutation_counts.empty:
+            continue
+        c_min, c_max = mutation_counts.min(), mutation_counts.max()
+        if c_max > c_min:
+            sizes = 6 + (mutation_counts - c_min) / (c_max - c_min) * 14
+        else:
+            sizes = [10] * len(mutation_counts)
+        trace.update(
+            line=dict(width=2),
+            marker=dict(size=list(sizes), line=dict(width=0)),
+            opacity=0.9,
+        )
+
     fig.update_layout(
         yaxis_title="Prevalence (%)",
         yaxis=dict(range=[0, None], fixedrange=True, rangemode="nonnegative"),
         xaxis_title="Year",
         xaxis=dict(fixedrange=True),
-        height=400,
-        hovermode="closest"
+        height=420,
+        hovermode="closest",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     )
-    
+
     return fig
 
 #Transmission Cluster Map
@@ -2431,6 +2538,9 @@ def create_country_stacked_bar(df, selected_virus, selected_regions=None, select
         color='genotype',
         labels={'count': 'Number of Sequences', 'Country_standard': 'Country'},
         color_discrete_map=genotype_colors
+    )
+    fig.update_traces(
+        marker_cornerradius=6
     )
     
     # Update layout for better readability
@@ -2712,11 +2822,11 @@ def _empty_plot(message):
             "text": message,
             "xref": "paper", "yref": "paper",
             "x": 0.5, "y": 0.5, "showarrow": False,
-            "font": {"size": 16}
+            "font": {"size": 14, "color": "#64748B", "family": "IBM Plex Sans, sans-serif"}
         }],
         height=300
     )
-    return fig
+    return apply_heptracker_figure_style(fig)
 
 def _df_to_json(df: pd.DataFrame) -> str:
     if df is None or df.empty:
@@ -2813,120 +2923,137 @@ def create_drug_resistance_profile(mutation_df, virus_type):
     
     return fig
 
-# Redundant sidebar helpers removed (now global in Full_Hepatitis_page.py)
-
-
-def dashboard_page_header():
-    """Top heading/actions area to the right of the fixed sidebar."""
-    return html.Div(
-        className="hep-page-header",
+def build_filter_bar_with_logo():
+    """Sticky top navbar (Row 1: site brand + page navigation) with Data Control Bar (Row 2: filters + search + export) below."""
+    header_bar = html.Div(
+        className="hep-top-navbar sticky-top mb-3 shadow-sm",
+        id="hep-header-bar",
         children=[
-            html.Div([
-                html.H1(id="dashboard-page-title", className="hep-page-title"),
-                html.Div(id="dashboard-page-subtitle", className="hep-page-subtitle"),
-            ]),
-            html.Div(
-                className="hep-page-actions",
-                children=[
-                    dcc.Input(
-                        id="global-search-input",
-                        placeholder="Search by Sequence ID",
-                        type="text",
-                        className="hep-search-input",
-                    ),
-                    dbc.Button(
-                        [html.I(className="fa fa-search me-2"), "Search"],
-                        id="global-search-btn",
-                        color="link",
-                        className="hep-search-btn",
-                    ),
-                    dbc.DropdownMenu(
-                        label="Download",
-                        children=[
-                            dbc.DropdownMenuItem("Data", id="btn-download-data"),
-                            dbc.DropdownMenuItem("Reports", href="/about#report-section"),
+            dbc.Container(
+                [
+                    dbc.Row(
+                        [
+                            # Left: Brand Logo & Title
+                            dbc.Col(
+                                [
+                                    html.A(
+                                        href="/dashboard",
+                                        className="d-flex align-items-center text-decoration-none py-1",
+                                        children=[
+                                            html.Div(
+                                                html.Img(
+                                                    src="/assets/Hepatitis_genome2.jpg",
+                                                    alt="HepTracker Logo",
+                                                    className="w-100 h-100 rounded-3",
+                                                    style={"objectFit": "cover"}
+                                                ),
+                                                className="brand-icon-bg p-1 rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0 shadow-sm border border-secondary border-opacity-25 bg-dark",
+                                                style={"width": "62px", "height": "62px", "overflow": "hidden"},
+                                            ),
+                                            html.Div([
+                                                html.Span("HepTracker", className="fw-extrabold lh-1 d-block mb-1", style={"fontSize": "1.6rem", "letterSpacing": "-0.4px", "color": "#38BDF8"}),
+                                                html.Span("Hepatitis Genomic Surveillance Dashboard", className="fw-bold d-block", style={"fontSize": "0.78rem", "letterSpacing": "1.1px", "color": "#A8B4C7"}),
+                                            ]),
+                                        ],
+                                    )
+                                ],
+                                xs=12, md=7,
+                                className="d-flex align-items-center mb-2 mb-md-0",
+                            ),
+                            # Right: Navigation Links
+                            dbc.Col(
+                                [
+                                    html.Div(
+                                        className="d-flex align-items-center justify-content-md-end gap-2",
+                                        children=[
+                                            dcc.Link(
+                                                [html.I(className="fa-solid fa-gauge me-1"), "Dashboard"],
+                                                href="/dashboard",
+                                                className="hep-nav-header-link active",
+                                            ),
+                                            dcc.Link(
+                                                [html.I(className="fa-solid fa-book-open me-1"), "Resources"],
+                                                href="/resources",
+                                                className="hep-nav-header-link",
+                                            ),
+                                            dcc.Link(
+                                                [html.I(className="fa-solid fa-circle-info me-1"), "About"],
+                                                href="/about",
+                                                className="hep-nav-header-link",
+                                            ),
+                                        ],
+                                    )
+                                ],
+                                xs=12, md=5,
+                            ),
                         ],
-                        color="link",
-                        className="hep-download-btn",
-                    ),
-                    dbc.Toast(
-                        "Your download is starting…",
-                        id="dl-toast",
-                        header="Download",
-                        is_open=False,
-                        dismissable=True,
-                        icon="success",
-                        duration=3000,
-                        className="position-fixed top-0 end-0 m-3",
-                    ),
+                        className="align-items-center py-2 px-3",
+                    )
                 ],
-            ),
+                fluid=True,
+            )
+        ],
+    )
+
+    return [header_bar]
+
+
+def build_section_selector():
+    """Section selector tabs aligned with the main dashboard content width."""
+    return html.Div(
+        className="hep-section-selector-container",
+        children=[
+            html.Div(
+                dbc.ButtonGroup(
+                    [
+                        dbc.Button(
+                            [html.I(className="fa-solid fa-map-location-dot me-2"), "Surveillance Map"],
+                            id="tab-overview",
+                            n_clicks=1,
+                            className="hep-section-tab-btn active",
+                        ),
+                        dbc.Button(
+                            [html.I(className="fa-solid fa-chart-line me-2"), "Epidemiology"],
+                            id="tab-epidemiology",
+                            n_clicks=0,
+                            className="hep-section-tab-btn",
+                        ),
+                        dbc.Button(
+                            [html.I(className="fa-solid fa-chart-pie me-2"), "Genotypes"],
+                            id="tab-genotypes",
+                            n_clicks=0,
+                            className="hep-section-tab-btn",
+                        ),
+                        dbc.Button(
+                            [html.I(className="fa-solid fa-dna me-2"), "Mutations"],
+                            id="tab-mutations",
+                            n_clicks=0,
+                            className="hep-section-tab-btn",
+                        ),
+                        dbc.Button(
+                            [html.I(className="fa-solid fa-vial me-2"), "My sequences"],
+                            id="tab-user-seq",
+                            n_clicks=0,
+                            className="hep-section-tab-btn",
+                        ),
+                    ],
+                    className="w-100 justify-content-center flex-wrap gap-2",
+                ),
+                className="mx-auto",
+                style={"maxWidth": "1400px"},
+            )
         ],
     )
 
 
 def build_overview_summary_cards():
-    """Horizontal summary cards shown above filters/plots."""
-    def metric_card(icon_class, value_id, label):
-        return dbc.Col(
-            html.Div(
-                className="hep-metric-card",
-                children=[
-                    html.Div(html.I(className=icon_class), className="hep-metric-icon"),
-                    html.Div([
-                        html.Div(id=value_id, className="hep-metric-value"),
-                        html.Div(label, className="hep-metric-label"),
-                    ], className="hep-metric-text"),
-                ],
-            ),
-            xs=12,
-            md=6,
-            xl=3,
-        )
-
-    return dbc.Row(
-        id="overview-summary-cards-row",
-        children=[
-            metric_card("fa-solid fa-dna", "indicator-total", "Sequences"),
-            metric_card("fa-solid fa-globe", "indicator-countries", "Countries"),
-            metric_card("fa-solid fa-code-branch", "indicator-genotypes", "Genotypes"),
-            metric_card("fa-solid fa-triangle-exclamation", "indicator-mutations", "Mutations"),
-        ],
-        className="hep-summary-row g-4",
-    )
+    """Horizontal summary cards shown above filters/plots (Optional)."""
+    return html.Div()
 
 
 def build_epi_summary_cards():
-    """Horizontal summary cards shown above epidemiology filters/plots."""
-    def metric_card(icon_class, value_id, label):
-        return dbc.Col(
-            html.Div(
-                className="hep-metric-card",
-                children=[
-                    html.Div(html.I(className=icon_class), className="hep-metric-icon"),
-                    html.Div([
-                        html.Div(id=value_id, className="hep-metric-value"),
-                        html.Div(label, className="hep-metric-label"),
-                    ], className="hep-metric-text"),
-                ],
-            ),
-            xs=12,
-            md=6,
-            xl=3,
-        )
-
-    return dbc.Row(
-        id="epi-summary-cards-row",
-        children=[
-            metric_card("fa-solid fa-user-shield", "epi-card-livingwith", "Living with infection"),
-            metric_card("fa-solid fa-virus-covid", "epi-card-newinfections", "New infections"),
-            metric_card("fa-solid fa-skull-crossbones", "epi-card-deaths", "Deaths"),
-            metric_card("fa-solid fa-chart-line", "epi-card-diag-treat", "Diagnosis / Treatment %"),
-        ],
-        className="hep-summary-row g-4",
-        style={"display": "none"},
-    )
-
+    """Horizontal summary cards for Epidemiology tab."""
+    return html.Div()
 
 
 def make_priority_table(priority_data):
@@ -2934,7 +3061,7 @@ def make_priority_table(priority_data):
     if priority_data is None or priority_data.empty:
         return html.Div(
             "No priority data available for current filters",
-            className="hep-empty-table",
+            className="hep-empty-table text-muted p-4 text-center",
         )
 
     display_df = priority_data.copy()
@@ -3001,14 +3128,10 @@ external_stylesheets = [
     dbc.themes.BOOTSTRAP
 ]
 
-#app = dash.Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
-
 # === APP LAYOUT ==============================================================
 def create_dashboard_layout():
     stores = html.Div(
         [
-            # selected-virus store is now global in Full_Hepatitis_page.py
-            #dcc.Store(id="dashboard-active-page-store", data=True),
             dcc.Store(id="filtered-store"),
             dcc.Store(id="gap-store"),
             dcc.Store(id="computed-metrics-store"),
@@ -3024,494 +3147,1359 @@ def create_dashboard_layout():
         style={"display": "none"},
     )
 
-    return html.Div(
-        id="hep-dashboard-shell-container",
-        className="hep-dashboard-shell",
-        children=[
-            stores,
-            html.Main(
-                style={"width": "100%", "flex": "1"},
-                children=[
-                    html.Div(
-                        className="hep-main-sticky-header",
-                        children=[
-                            dashboard_page_header(),
-                        ]
-                    ),
-                    build_overview_summary_cards(),
-                    build_epi_summary_cards(),
+    main_children = [
+        *build_filter_bar_with_logo(),
 
-        # === COMMON FILTERS (ALWAYS VISIBLE) ===
-        dbc.Row([
-            dbc.Col([
-                html.H6("Filters", className="hep-section-title"),
-                dbc.Card([
-                    dbc.CardBody([
-                        dbc.Row([
-                            # Year range slider (35-45% of filter row, i.e. width 5 of 12)
-                            dbc.Col([
-                                html.Div([
-                                    html.Label("YEAR RANGE", className="fw-bold text-uppercase small mb-0", 
-                                               style={"letterSpacing": "0.05em", "color": "rgba(255,255,255,0.6)"}),
-                                    html.Span(id="year-range-label", className="fw-bold float-end text-primary", 
-                                              style={"fontSize": "0.95rem"})
-                                ], className="mb-2 clearfix"),
-                                html.Div([
-                                    dcc.RangeSlider(
-                                        id="year-range-slider",
-                                        min=1963,
-                                        max=2024,
-                                        value=[1963, 2024],
-                                        step=1,
-                                        marks={y: str(y) for y in [1963, 1970, 1980, 1990, 2000, 2010, 2020, 2024]},
-                                        tooltip={"always_visible": True, "placement": "top"},
-                                        className="hep-range-slider"
+        # Section Selector Tabs at the top of main dashboard layout
+        build_section_selector(),
+
+        # === TAB 1: SURVEILLANCE MAP (OVERVIEW CONTENT) ===
+        html.Div(
+            id="overview-content",
+            className="pb-5",
+            style={"paddingBottom": "80px"},
+            children=[
+                # LEVEL 1: WHAT DOES THIS DATASET CONTAIN? — Summary KPI Cards (Full Width)
+                dbc.Row(
+                    [
+                        # KPI 1: Total Sequences
+                        dbc.Col(
+                            dbc.Card(
+                                dbc.CardBody([
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                html.I(className="fa-solid fa-dna text-primary fs-4"),
+                                                className="p-2 bg-primary-subtle text-primary rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                                style={"width": "44px", "height": "44px"}
+                                            ),
+                                            html.Div([
+                                                html.Div("TOTAL SEQUENCES", className="text-muted small fw-bold tracking-wider mb-1", style={"fontSize": "0.68rem"}),
+                                                html.H3(id="indicator-total", className="fw-extrabold text-dark mb-0 fs-3"),
+                                            ])
+                                        ],
+                                        className="d-flex align-items-center"
                                     )
-                                ], style={"paddingLeft": "5px", "paddingRight": "5px"})
-                            ], xs=12, lg=4, className="mb-3 mb-lg-0"),
-                            
-                            # Region dropdown
-                            dbc.Col([
-                                html.Label("REGION", className="fw-bold text-uppercase small mb-2", 
-                                           style={"letterSpacing": "0.05em", "color": "rgba(255,255,255,0.6)"}),
-                                dcc.Dropdown(
-                                    id="continent-dropdown",
-                                    multi=True,
-                                    placeholder="All regions",
-                                    className="hep-dropdown"
-                                )
-                            ], xs=12, lg=3, className="mb-3 mb-lg-0"),
-                            
-                            # Country dropdown
-                            dbc.Col([
-                                html.Label("COUNTRY", className="fw-bold text-uppercase small mb-2", 
-                                           style={"letterSpacing": "0.05em", "color": "rgba(255,255,255,0.6)"}),
-                                dcc.Dropdown(
-                                    id="country-dropdown",
-                                    multi=True,
-                                    placeholder="All countries",
-                                    className="hep-dropdown"
-                                )
-                            ], xs=12, lg=3, className="mb-3 mb-lg-0"),
-                            
-                            # Genotype dropdown
-                            dbc.Col([
-                                html.Label("GENOTYPE", className="fw-bold text-uppercase small mb-2", 
-                                           style={"letterSpacing": "0.05em", "color": "rgba(255,255,255,0.6)"}),
-                                dcc.Dropdown(
-                                    id="genotype-dropdown",
-                                    multi=True,
-                                    placeholder="All genotypes",
-                                    className="hep-dropdown"
-                                )
-                            ], xs=12, lg=2)
-                        ], className="align-items-end")
-                    ])
-                ], className="mb-4 shadow-sm border-0")
-            ], width=12)
-        ], id="common-filters", style={"position": "relative", "zIndex": 1100}),
+                                ]),
+                                className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                            ),
+                            xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                        ),
+                        # KPI 2: Countries Represented
+                        dbc.Col(
+                            dbc.Card(
+                                dbc.CardBody([
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                html.I(className="fa-solid fa-earth-americas text-success fs-4"),
+                                                className="p-2 bg-success-subtle text-success rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                                style={"width": "44px", "height": "44px"}
+                                            ),
+                                            html.Div([
+                                                html.Div("COUNTRIES", className="text-muted small fw-bold tracking-wider mb-1", style={"fontSize": "0.68rem"}),
+                                                html.H3(id="indicator-countries", className="fw-extrabold text-dark mb-0 fs-3"),
+                                            ])
+                                        ],
+                                        className="d-flex align-items-center"
+                                    )
+                                ]),
+                                className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                            ),
+                            xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                        ),
+                        # KPI 3: Unique Genotypes
+                        dbc.Col(
+                            dbc.Card(
+                                dbc.CardBody([
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                html.I(className="fa-solid fa-microscope text-info fs-4"),
+                                                className="p-2 bg-info-subtle text-info rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                                style={"width": "44px", "height": "44px"}
+                                            ),
+                                            html.Div([
+                                                html.Div("GENOTYPES", className="text-muted small fw-bold tracking-wider mb-1", style={"fontSize": "0.68rem"}),
+                                                html.H3(id="indicator-genotypes", className="fw-extrabold text-dark mb-0 fs-3"),
+                                            ])
+                                        ],
+                                        className="d-flex align-items-center"
+                                    )
+                                ]),
+                                className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                            ),
+                            xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                        ),
+                        # KPI 4: Date Range
+                        dbc.Col(
+                            dbc.Card(
+                                dbc.CardBody([
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                html.I(className="fa-solid fa-calendar-days text-warning fs-4"),
+                                                className="p-2 bg-warning-subtle text-warning rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                                style={"width": "44px", "height": "44px"}
+                                            ),
+                                            html.Div([
+                                                html.Div("DATE RANGE", className="text-muted small fw-bold tracking-wider mb-1", style={"fontSize": "0.68rem"}),
+                                                html.H3(id="indicator-years", children="1963–2025", className="fw-extrabold text-dark mb-0 fs-3"),
+                                            ])
+                                        ],
+                                        className="d-flex align-items-center"
+                                    )
+                                ]),
+                                className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                            ),
+                            xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                        ),
+                    ],
+                    className="mb-4 g-3 mx-auto",
+                    style={"maxWidth": "1400px"}
+                ),
 
+                # LEVEL 2: WHERE ARE THE SEQUENCES AND HOW CAN I INTERROGATE THEM? — Compact Filters (Left) + Map (Right)
+                dbc.Row(
+                    [
+                        # LEFT: Compact Vertical Filter Card Aligned with Map
+                        dbc.Col(
+                            [
+                                dbc.Card(
+                                    [
+                                        dbc.CardBody([
+                                            html.Div([
+                                                html.I(className="fa-solid fa-sliders text-primary me-2"),
+                                                html.Span("Filters", className="fw-extrabold small tracking-wider text-dark"),
+                                            ], className="d-flex align-items-center mb-3 pb-2 border-bottom"),
 
-        # === TAB 1: OVERVIEW CONTENT (DEFAULT) ===
-        html.Div(id="overview-content", children=[
-            # Display Toggles
+                                            # Virus Dropdown
+                                            html.Div([
+                                                html.Label("VIRUS", className="hep-filter-label fw-bold small text-muted mb-1"),
+                                                dcc.Dropdown(
+                                                    id="virus-dropdown",
+                                                    options=[
+                                                        {"label": "Hepatitis B (HBV)", "value": "HBV"},
+                                                        {"label": "Hepatitis C (HCV)", "value": "HCV"},
+                                                        {"label": "Hepatitis E (HEV)", "value": "HEV"},
+                                                        {"label": "Hepatitis A (HAV)", "value": "HAV", "disabled": True},
+                                                        {"label": "Hepatitis D (HDV)", "value": "HDV", "disabled": True},
+                                                    ],
+                                                    value="HBV",
+                                                    clearable=False,
+                                                    className="hep-dropdown mb-3",
+                                                ),
+                                            ]),
+
+                                            # Region Dropdown
+                                            html.Div([
+                                                html.Label("REGION", className="hep-filter-label fw-bold small text-muted mb-1"),
+                                                dcc.Dropdown(
+                                                    id="continent-dropdown",
+                                                    multi=True,
+                                                    placeholder="All regions",
+                                                    className="hep-dropdown mb-3",
+                                                ),
+                                            ]),
+
+                                            # Country Dropdown
+                                            html.Div([
+                                                html.Label("COUNTRY", className="hep-filter-label fw-bold small text-muted mb-1"),
+                                                dcc.Dropdown(
+                                                    id="country-dropdown",
+                                                    multi=True,
+                                                    placeholder="All countries",
+                                                    className="hep-dropdown mb-3",
+                                                ),
+                                            ]),
+
+                                            # Genotype Dropdown
+                                            html.Div([
+                                                html.Label("GENOTYPE", className="hep-filter-label fw-bold small text-muted mb-1"),
+                                                dcc.Dropdown(
+                                                    id="genotype-dropdown",
+                                                    multi=True,
+                                                    placeholder="All genotypes",
+                                                    className="hep-dropdown mb-3",
+                                                ),
+                                            ]),
+
+                                            # Year Range Slider & Inputs
+                                            html.Div([
+                                                html.Div([
+                                                    html.Label("YEAR RANGE", className="hep-filter-label fw-bold small text-muted mb-1"),
+                                                    html.Div([
+                                                        dcc.Input(
+                                                            id="year-start-input",
+                                                            type="number",
+                                                            min=1963,
+                                                            max=2025,
+                                                            value=1963,
+                                                            className="form-control form-control-sm text-center px-1 hep-year-input",
+                                                            style={"width": "58px", "fontSize": "0.78rem"}
+                                                        ),
+                                                        html.Span("–", className="text-muted small px-1 fw-bold"),
+                                                        dcc.Input(
+                                                            id="year-end-input",
+                                                            type="number",
+                                                            min=1963,
+                                                            max=2025,
+                                                            value=2025,
+                                                            className="form-control form-control-sm text-center px-1 hep-year-input",
+                                                            style={"width": "58px", "fontSize": "0.78rem"}
+                                                        ),
+                                                    ], className="d-flex align-items-center me-1"),
+                                                ], className="d-flex justify-content-between align-items-center mb-1"),
+                                                dcc.RangeSlider(
+                                                    id="year-range-slider",
+                                                    min=1963,
+                                                    max=2025,
+                                                    step=1,
+                                                    value=[1963, 2025],
+                                                    marks={1963: "1963", 1990: "1990", 2010: "2010", 2025: "2025"},
+                                                    className="hep-range-slider mb-3",
+                                                ),
+                                            ]),
+
+                                            # Search Bar
+                                            html.Div([
+                                                html.Label("SEARCH", className="hep-filter-label fw-bold small text-muted mb-1"),
+                                                dbc.InputGroup([
+                                                    dbc.Input(
+                                                        id="global-search-input",
+                                                        type="text",
+                                                        placeholder="GenBank ID...",
+                                                        className="form-control-sm",
+                                                    ),
+                                                    dbc.Button(
+                                                        html.I(className="fa-solid fa-magnifying-glass"),
+                                                        id="global-search-btn",
+                                                        color="primary",
+                                                        size="sm",
+                                                    ),
+                                                ], className="mb-3"),
+                                            ]),
+
+                                            # Action Buttons: Export & Reset
+                                            html.Div([
+                                                dbc.Button(
+                                                    [html.I(className="fa-solid fa-download me-1"), "Export"],
+                                                    id="btn-download-data",
+                                                    color="outline-secondary",
+                                                    size="sm",
+                                                    className="w-50 me-1 fw-bold",
+                                                ),
+                                                dbc.Button(
+                                                    [html.I(className="fa-solid fa-rotate-left me-1"), "Reset"],
+                                                    id="btn-reset-filters",
+                                                    color="outline-danger",
+                                                    size="sm",
+                                                    className="w-50 ms-1 fw-bold",
+                                                ),
+                                            ], className="d-flex justify-content-between pt-2 border-top mt-auto"),
+                                        ], className="p-3 d-flex flex-column h-100 justify-content-between")
+                                    ],
+                                    className="h-100 shadow-sm border-0 bg-white rounded-3",
+                                    id="common-filters"
+                                )
+                            ],
+                            xs=12,
+                            lg=4,
+                            xl=3,
+                            className="mb-4 mb-lg-0 d-flex flex-column",
+                        ),
+                        # RIGHT: Global Distribution Map
+                        dbc.Col(
+                            [
+                                dbc.Card(
+                                    [
+                                        dbc.CardBody(
+                                            [
+                                                # Compact map header
+                                                dbc.Row(
+                                                    [
+                                                        # LEFT: title + update date
+                                                        dbc.Col(
+                                                            [
+                                                                html.H4(
+                                                                    id="dashboard-page-title",
+                                                                    className="mb-0 fw-bold fs-6 text-dark"
+                                                                ),
+                                                                html.Small(
+                                                                    id="dashboard-page-subtitle",
+                                                                    className="text-secondary",
+                                                                    style={"fontSize": "0.76rem"}
+                                                                ),
+                        
+                                                                # Keep callback target but don't display
+                                                                html.Div(
+                                                                    id="map-title-sub",
+                                                                    style={"display": "none"}
+                                                                ),
+                                                                html.Div(
+                                                                    id="map-title-main",
+                                                                    style={"display": "none"}
+                                                                ),
+                                                            ],
+                                                            width=True,
+                                                        ),
+                        
+                                                        # RIGHT: controls
+                                                        dbc.Col(
+                                                            [
+                                                                html.Div(
+                                                                    [
+                                                                        dcc.RadioItems(
+                                                                            id="map-mode",
+                                                                            options=[
+                                                                                {
+                                                                                    "label": "Sequences",
+                                                                                    "value": "sequences"
+                                                                                },
+                                                                                {
+                                                                                    "label": "Coverage",
+                                                                                    "value": "coverage"
+                                                                                },
+                                                                                {
+                                                                                    "label": "Epidemiology",
+                                                                                    "value": "epidemiology"
+                                                                                },
+                                                                            ],
+                                                                            value="sequences",
+                                                                            className="hep-btn-group",
+                                                                            inputClassName="btn-check",
+                                                                            labelClassName="btn btn-outline-secondary btn-sm",
+                                                                        ),
+                        
+                                                                        html.Div(
+                                                                            dcc.RadioItems(
+                                                                                id="ihme-metric-type",
+                                                                                options=[
+                                                                                    {
+                                                                                        "label": "Deaths",
+                                                                                        "value": "Deaths|Number"
+                                                                                    },
+                                                                                    {
+                                                                                        "label": "Incidence",
+                                                                                        "value": "Incidence|Number"
+                                                                                    },
+                                                                                    {
+                                                                                        "label": "Prevalence",
+                                                                                        "value": "Prevalence|Number"
+                                                                                    },
+                                                                                ],
+                                                                                value="Prevalence|Number",
+                                                                                className="hep-btn-group",
+                                                                                inputClassName="btn-check",
+                                                                                labelClassName="btn btn-outline-secondary btn-sm",
+                                                                            ),
+                                                                            id="epidemiology-controls",
+                                                                            style={"display": "none"},
+                                                                        ),
+                        
+                                                                        dcc.RadioItems(
+                                                                            id="display-mode",
+                                                                            options=[
+                                                                                {
+                                                                                    "label": "Raw",
+                                                                                    "value": "raw"
+                                                                                },
+                                                                                {
+                                                                                    "label": "Per M",
+                                                                                    "value": "PerMillion"
+                                                                                },
+                                                                            ],
+                                                                            value="raw",
+                                                                            className="hep-btn-group",
+                                                                            inputClassName="btn-check",
+                                                                            labelClassName="btn btn-outline-secondary btn-sm",
+                                                                        ),
+                                                                    ],
+                                                                    className=(
+                                                                        "d-flex align-items-center "
+                                                                        "justify-content-end gap-2 flex-wrap"
+                                                                    ),
+                                                                )
+                                                            ],
+                                                            width="auto",
+                                                        ),
+                                                    ],
+                                                    className="align-items-center g-2 mb-1",
+                                                ),
+                        
+                                                # Map
+                                                dcc.Loading(
+                                                    dcc.Graph(
+                                                        id="genotype-map",
+                                                        config={
+                                                            "displayModeBar": True,
+                                                            "displaylogo": False
+                                                        },
+                                                        style={"height": "480px"},
+                                                    ),
+                                                    type="circle",
+                                                ),
+                                            ],
+                                            className="px-3 pt-2 pb-2",
+                                        )
+                                    ],
+                                    className="shadow-sm border-0 bg-white rounded-3 h-100",
+                                )
+                            ],
+                            xs=12,
+                            lg=8,
+                            xl=9,
+                            className="d-flex flex-column",
+                        ),
+                    ],
+                    className="mb-4 g-3 mx-auto align-items-stretch",
+                    style={"maxWidth": "1400px"}
+                ),
+
+                # ROW 4: Sequences by Genotype (Left) + Mutation Types Pie (Right)
+                dbc.Row(
+                    [
+                        # LEFT: Sequences by Genotype Bar Chart
+                        dbc.Col(
+                            [
+                                dbc.Card(
+                                    [
+                                        dbc.CardBody(
+                                            [
+                                                html.H5(
+                                                    "Sequences by Genotype (Regional Distribution)",
+                                                    className="hep-card-title mb-3",
+                                                ),
+                                                dcc.Loading(
+                                                    dcc.Graph(
+                                                        id="region-genotype-bar-chart",
+                                                        config={"displayModeBar": False},
+                                                        style={"height": "350px"},
+                                                        className="w-100",
+                                                    ),
+                                                    type="circle",
+                                                ),
+                                            ],
+                                            className="p-3 d-flex flex-column h-100",
+                                        )
+                                    ],
+                                    className="h-100 shadow-sm border-0 bg-white rounded-3",
+                                )
+                            ],
+                            xs=12,
+                            lg=8,
+                            className="mb-4 mb-lg-0",
+                        ),
+                        # RIGHT: Mutation Types Pie Chart
+                        dbc.Col(
+                            [
+                                dbc.Card(
+                                    [
+                                        dbc.CardBody(
+                                            [
+                                                html.H5(
+                                                    "Mutation Types & Variant Profile",
+                                                    className="hep-card-title mb-3",
+                                                ),
+                                                dcc.Loading(
+                                                    dcc.Graph(
+                                                        id="homepage-mutation-pie-graph",
+                                                        config={"displayModeBar": False},
+                                                        style={"height": "350px"},
+                                                        className="w-100",
+                                                    ),
+                                                    type="circle",
+                                                ),
+                                            ],
+                                            className="p-3 d-flex flex-column h-100",
+                                        )
+                                    ],
+                                    className="h-100 shadow-sm border-0 bg-white rounded-3",
+                                )
+                            ],
+                            xs=12,
+                            lg=4,
+                        ),
+                    ],
+                    className="mb-4 g-3 mx-auto align-items-stretch",
+                    style={"maxWidth": "1400px"},
+                ),
+
+                # ROW 5: Burden Forecast (Left) + Sequencing Priority Ranking (Right)
+                dbc.Row(
+                    [
+                        # LEFT: Burden Forecast
+                        dbc.Col(
+                            [
+                                dbc.Card(
+                                    [
+                                        dbc.CardBody(
+                                            [
+                                                html.H5(
+                                                    "Burden Forecast with Projections",
+                                                    className="hep-card-title mb-3",
+                                                ),
+                                                dcc.Loading(
+                                                    dcc.Graph(
+                                                        id="homepage-forecast-summary-graph",
+                                                        config={"displayModeBar": True, "displaylogo": False},
+                                                        style={"height": "350px"},
+                                                        className="w-100",
+                                                    ),
+                                                    type="circle",
+                                                ),
+                                            ],
+                                            className="p-3 d-flex flex-column h-100",
+                                        )
+                                    ],
+                                    className="h-100 shadow-sm border-0 bg-white rounded-3",
+                                )
+                            ],
+                            xs=12,
+                            lg=6,
+                            className="mb-4 mb-lg-0",
+                        ),
+                        # RIGHT: Sequencing Priority Ranking Table
+                        dbc.Col(
+                            [
+                                dbc.Card(
+                                    [
+                                        dbc.CardBody(
+                                            [
+                                                html.Div(
+                                                    [
+                                                        html.H5(
+                                                            "Sequencing Priority Ranking",
+                                                            className="hep-card-title mb-0",
+                                                        ),
+                                                        dbc.Button(
+                                                            "Full Ranking →",
+                                                            id="btn-goto-priority-tab",
+                                                            color="link",
+                                                            className="p-0 text-decoration-none small fw-bold text-primary",
+                                                        ),
+                                                    ],
+                                                    className="d-flex justify-content-between align-items-center mb-3",
+                                                ),
+                                                dcc.Loading(
+                                                    html.Div(
+                                                        id="homepage-priority-table-summary",
+                                                        style={"minHeight": "300px"},
+                                                    ),
+                                                    type="circle",
+                                                ),
+                                            ],
+                                            className="p-3 d-flex flex-column h-100",
+                                        )
+                                    ],
+                                    className="h-100 shadow-sm border-0 bg-white rounded-3",
+                                )
+                            ],
+                            xs=12,
+                            lg=6,
+                        ),
+                    ],
+                    className="mb-4 g-3 mx-auto align-items-stretch",
+                    style={"maxWidth": "1400px"},
+                ),
+            ],
+        ),
+        # === TAB 2: EPIDEMIOLOGY CONTENT ===
+        html.Div(id="epidemiology-content", className="pb-5", style={"display": "none", "paddingBottom": "80px"}, children=[
+            
+            # =========================================================================
+            # ROW 1: SUMMARY KPIs (4 Compact Cards: 25% | 25% | 25% | 25%)
+            # =========================================================================
             dbc.Row([
-                dbc.Col([
-                    dbc.Card([
+                # Card 1: Prevalence
+                dbc.Col(
+                    dbc.Card(
                         dbc.CardBody([
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("Display Mode:", className="fw-bold me-2"),
-                                    dcc.RadioItems(
-                                        id="display-mode",
-                                        options=[
-                                            {"label": "Raw Count", "value": "raw"},
-                                            {"label": "Per Million", "value": "PerMillion"}
-                                        ],
-                                        value="raw",
-                                        className="hep-radio-group"
-                                    )
-                                ], width=6),
-                                
-                                dbc.Col([
-                                    html.Label("Map Mode:", className="fw-bold me-2"),
-                                    dcc.RadioItems(
-                                        id="map-mode",
-                                        options=[
-                                            {"label": "Sequences", "value": "sequences"},
-                                            {"label": "Coverage", "value": "coverage"}, 
-                                            {"label": "Epidemiology", "value": "epidemiology"},
-                                        ],
-                                        value="sequences",
-                                        className="hep-radio-group"
-                                    ),
-                                ], width="auto"),
-                            ], className="g-3 align-items-end mb-2"),
-                        ])
-                    ], className="mb-4 shadow-sm")
-                ], width=12)
-            ]),
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-chart-line text-primary fs-4"),
+                                    className="p-2 bg-primary-subtle text-primary rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
+                                ),
+                                html.Div([
+                                    html.Div("PREVALENCE", className="hep-filter-label mb-1"),
+                                    html.Div(id="epi-prevalence-total", className="hep-kpi-value mb-0"),
+                                    html.Div(id="epi-prevalence-trend", className="hep-meta-text mt-1")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
 
-            # ROW 1: Map Section
+                # Card 2: Incidence Rate
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-virus text-danger fs-4"),
+                                    className="p-2 bg-danger-subtle text-danger rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
+                                ),
+                                html.Div([
+                                    html.Div("INCIDENCE RATE", className="hep-filter-label mb-1"),
+                                    html.Div(id="epi-incidence-total", className="hep-kpi-value mb-0"),
+                                    html.Div(id="epi-incidence-trend", className="hep-meta-text mt-1")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
+
+                # Card 3: Mortality / Deaths
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-heart-pulse text-warning fs-4"),
+                                    className="p-2 bg-warning-subtle text-warning rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
+                                ),
+                                html.Div([
+                                    html.Div("MORTALITY / DEATHS", className="hep-filter-label mb-1"),
+                                    html.Div(id="epi-deaths-total", className="hep-kpi-value mb-0"),
+                                    html.Div(id="epi-deaths-trend", className="hep-meta-text mt-1")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
+
+                # Card 4: Genomic Surveillance Coverage
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-shield-halved text-success fs-4"),
+                                    className="p-2 bg-success-subtle text-success rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
+                                ),
+                                html.Div([
+                                    html.Div("GENOMIC COVERAGE", className="hep-filter-label mb-1"),
+                                    html.Div(id="epi-coverage-percent", className="hep-kpi-value mb-0"),
+                                    html.Div(id="epi-coverage-status", className="hep-meta-text mt-1 fw-semibold")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
+            ], className="g-3 mb-4"),
+
+            # Hidden targets for callback outputs to maintain strict callback integrity
+            html.Div([
+                html.Div(id="epi-sex-ratio"),
+                html.Div(id="epi-top-age-group"),
+                html.Div(id="epi-age-percentage"),
+                html.Div(id="epi-top-region"),
+                html.Div(id="epi-region-percentage"),
+            ], style={"display": "none"}),
+
+
+            # =========================================================================
+            # ROW 2: EPIDEMIOLOGY OVER TIME & CARE CASCADE (Side-by-Side 50% | 50%)
+            # =========================================================================
             dbc.Row([
-                # Map Section
+                # Left 50% (6 cols): Disease Burden Over Time with Filters
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             html.Div([
-                                html.H4(id="map-title-main", className="mb-1"),
-                                html.Small(id="map-title-sub", className="text-muted")
-                            ], className="mb-3"),
-                            
+                                html.H5("Disease Burden Over Time", className="hep-card-title mb-1"),
+                                html.Small("Historical trajectory (1990–2025) with 2015 baseline comparison", className="hep-meta-text d-block mb-3"),
+                                
+                                # Interactive Filter Controls Bar
+                                html.Div([
+                                    html.Div([
+                                        html.Label("Metric:", className="hep-filter-label me-1 mb-0"),
+                                        dcc.Dropdown(
+                                            id="epi-trend-metric",
+                                            options=[
+                                                {"label": "Prevalence", "value": "Prevalence"},
+                                                {"label": "Incidence", "value": "Incidence"},
+                                                {"label": "Deaths / Mortality", "value": "Deaths"}
+                                            ],
+                                            value="Prevalence",
+                                            clearable=False,
+                                            searchable=False,
+                                            className="hep-control-dropdown hep-control-sm me-2",
+                                        ),
+                                    ], className="d-flex align-items-center me-2 mb-2 mb-sm-0"),
+                                    
+                                    html.Div([
+                                        html.Label("Measure:", className="hep-filter-label me-1 mb-0"),
+                                        dcc.Dropdown(
+                                            id="epi-trend-measure",
+                                            options=[
+                                                {"label": "Rate", "value": "Rate"},
+                                                {"label": "Number", "value": "Number"}
+                                            ],
+                                            value="Rate",
+                                            clearable=False,
+                                            searchable=False,
+                                            className="hep-control-dropdown hep-control-xs me-2",
+                                        ),
+                                    ], className="d-flex align-items-center me-2 mb-2 mb-sm-0"),
+                                    
+                                    
+                                ], className="d-flex align-items-center flex-wrap gap-1 mb-3 bg-light p-2 rounded-2"),
+                            ]),
+                            dcc.Loading(dcc.Graph(id="epi-disease-burden-trend-graph", style={"height": "340px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=6, className="mb-4 mb-lg-0"),
+
+                # Right 50% (6 cols): Diagnosis & Treatment Cascade (2022)
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.H5("Diagnosis & Treatment Cascade (2022)", className="hep-card-title mb-1"),
+                                html.Small("Global care cascade: living with infection, diagnosed, and treated", className="hep-meta-text d-block mb-3"),
+                            ]),
+                            dcc.Loading(dcc.Graph(id="epi-cascade-bars-graph", style={"height": "395px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=6),
+            ], className="g-3 mb-4 align-items-stretch"),
+
+
+            # =========================================================================
+            # ROW 3: GEOGRAPHIC COMPARISON (Side-by-Side 50% | 50%)
+            # =========================================================================
+            dbc.Row([
+                # Left 50%: Disease Burden & Care Response Map
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
                             dbc.Row([
                                 dbc.Col([
-                                    html.Label("IHME Metric:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="ihme-metric-type",
-                                        options=[
-                                            {"label": "Deaths", "value": "Deaths|Number"},
-                                            {"label": "Incidence", "value": "Incidence|Number"},
-                                            {"label": "Prevalence", "value": "Prevalence|Number"},
+                                    html.H5("Disease Burden & Care Response", className="hep-card-title mb-1"),
+                                ], width=True),
+                                dbc.Col([
+                                    html.Div([
+                                        dcc.RadioItems(
+                                            id="epi-map-category",
+                                            options=[
+                                                {"label": "Disease Burden", "value": "burden"},
+                                                {"label": "Program Response", "value": "response"},
+                                            ],
+                                            value="burden",
+                                            className="hep-btn-group me-2",
+                                            inputClassName="btn-check",
+                                            labelClassName="btn btn-outline-secondary btn-sm",
+                                        ),
+                                        dcc.Dropdown(
+                                            id="epi-metric-dropdown",
+                                            options=[
+                                                {"label": "People living with infection", "value": "livingwith_num"},
+                                                {"label": "New infections", "value": "new_infections_num"},
+                                                {"label": "Deaths", "value": "deaths_num"},
+                                                {"label": "Prevalence %", "value": "prevalence_pct"},
+                                                {"label": "Incidence rate", "value": "incidence_rate"},
+                                                {"label": "Mortality rate", "value": "mortality_rate"},
+                                            ],
+                                            value="livingwith_num",
+                                            clearable=False,
+                                            searchable=False,
+                                            className="hep-control-dropdown hep-control-md d-inline-block",
+                                        )
+                                    ], className="d-flex align-items-center flex-wrap gap-2 mb-3")
+                                ], width="auto", className="d-flex align-items-center")
+                            ], className="g-2 align-items-center mb-2"),
+                            dcc.Loading(dcc.Graph(id="gho-burden-map", style={"height": "330px"}), type="circle")
+                        ], className="p-3")
+                    ], id="epi-controls-row", className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=6, className="mb-4 mb-lg-0"),
+
+                # Right 50%: Genomic Surveillance Coverage Map
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.H5("Genomic Surveillance Coverage Map", className="hep-card-title mb-1"),
+                                html.Small("Sequences available relative to estimated disease burden", className="hep-meta-text mb-3 d-block"),
+                            ]),
+                            dcc.Loading(dcc.Graph(id="epi-coverage-map-graph", style={"height": "330px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=6),
+            ], className="g-3 mb-4 align-items-stretch"),
+
+
+            # =========================================================================
+            # ROW 4: SURVEILLANCE GAP — DECISION-SUPPORT SECTION (58% | 42%)
+            # =========================================================================
+            dbc.Row([
+                # Left 58% (7 cols): Burden vs Sequencing Scatter Plot
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dbc.Row([
+                                dbc.Col([
+                                    html.H5("Burden vs. Sequencing Coverage (Surveillance Gap)", className="hep-card-title mb-1"),
+                                    html.Small("Countries in bottom-right quadrant (High Burden + Low Coverage) represent critical surveillance priorities", className="hep-meta-text d-block mb-0"),
+                                ], width=True),
+                                dbc.Col([
+                                    html.Div(
+                                        id="hbv-epi-trends-controls",
+                                        children=[
+                                            dcc.Dropdown(
+                                                id="hbv-y-metric",
+                                                options=[
+                                                    {"label": "Prevalence %", "value": "hbv_prevalence_pct"},
+                                                    {"label": "New Infections", "value": "hbv_new_infections_num"},
+                                                    {"label": "Living with HBV", "value": "hbv_livingwith_num"},
+                                                ],
+                                                value="hbv_prevalence_pct",
+                                                clearable=False,
+                                                searchable=False,
+                                                className="hep-control-dropdown hep-control-sm",
+                                            )
                                         ],
-                                        value="Prevalence|Number",
-                                        clearable=False,
-                                        style={"width": "200px"}
-                                    )
-                                ], width="auto", id="epidemiology-controls"),
-                            ], className="mb-3 g-3"),
+                                        style={"display": "flex", "alignItems": "center"}
+                                    ),
+                                    html.Div(
+                                        id="hcv-epi-trends-controls",
+                                        children=[
+                                            dcc.Dropdown(
+                                                id="hcv-x-metric",
+                                                options=[
+                                                    {"label": "Diagnosis Rate %", "value": "hcv_diagnosis_rate_pct"},
+                                                    {"label": "Treatment Rate %", "value": "hcv_treatment_rate_diagnosed_pct"},
+                                                ],
+                                                value="hcv_diagnosis_rate_pct",
+                                                clearable=False,
+                                                searchable=False,
+                                                className="hep-control-dropdown hep-control-sm me-2",
+                                            ),
+                                            dcc.Dropdown(
+                                                id="hcv-y-metric",
+                                                options=[
+                                                    {"label": "Prevalence %", "value": "hcv_prevalence_pct"},
+                                                    {"label": "New Infections", "value": "hcv_new_infections_num"},
+                                                    {"label": "Living with HCV", "value": "hcv_livingwith_num"},
+                                                ],
+                                                value="hcv_prevalence_pct",
+                                                clearable=False,
+                                                searchable=False,
+                                                className="hep-control-dropdown hep-control-sm",
+                                            ),
+                                        ],
+                                        style={"display": "none", "alignItems": "center"}
+                                    ),
+                                ], width="auto", className="d-flex align-items-center")
+                            ], className="g-2 align-items-center mb-3"),
                             
-                            dcc.Loading(
-                                dcc.Graph(
-                                    id="genotype-map", 
-                                    config={'displayModeBar': True, 'displaylogo': False},
-                                    style={"height": "100%"}
+                            # Hidden toggling containers to preserve existing HBV/HCV callbacks
+                            html.Div(id="hbv-epi-trends-row", children=[
+                                dcc.Loading(dcc.Graph(id="hbv-epi-trend-plot", style={"height": "360px", "width": "100%"}), type="circle")
+                            ]),
+
+                            html.Div(id="hcv-epi-trends-row", children=[
+                                dcc.Loading(dcc.Graph(id="hcv-epi-trend-plot", style={"height": "360px", "width": "100%"}), type="circle")
+                            ]),
+
+                            # Keep burden-coverage-scatter in DOM for fallback callbacks
+                            html.Div(dcc.Graph(id="burden-coverage-scatter", style={"display": "none"}))
+                        ], className="p-3 style-overflow-hidden", style={"overflow": "hidden"})
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100 style-overflow-hidden", style={"overflow": "hidden"})
+                ], lg=7, className="mb-4 mb-lg-0"),
+
+                # Right 42% (5 cols): Priority / Gap Ranking Table
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.H5("Surveillance Priorities", className="hep-card-title mb-0"),
+                                dbc.Button(
+                                    "Full Ranking →",
+                                    id="epi-btn-goto-priority-tab",
+                                    color="link",
+                                    className="p-0 text-decoration-none small fw-bold text-primary",
                                 ),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100")
+                            ], className="d-flex justify-content-between align-items-center mb-3"),
+                            
+                            html.Div(id="hbv-epi-priority-table"),
+                            html.Div(id="hcv-epi-priority-table"),
+                        ], className="p-3 d-flex flex-column h-100")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=5),
+            ], className="g-3 mb-4 align-items-stretch"),
+
+
+            # =========================================================================
+            # ROW 5: WHO 2030 ELIMINATION PROGRESS (Full Width 100%)
+            # =========================================================================
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div([
+                                    html.H5("WHO 2030 Elimination Progress", className="hep-card-title mb-1"),
+                                    html.Small("Historical trajectory (2015–2025), forecast to 2030, and comparison against WHO 90% reduction target", className="hep-meta-text")
+                                ]),
+                                html.Div([
+                                    dbc.Badge([
+                                        html.I(className="fa-solid fa-circle-exclamation me-1"),
+                                        html.Span(id="epi-2030-progress", children="● OFF TRACK")
+                                    ], color="danger", className="px-3 py-2 fs-6 rounded-pill shadow-sm")
+                                ], className="mt-2 mt-sm-0")
+                            ], className="d-flex justify-content-between align-items-center mb-3 flex-wrap"),
+                            dcc.Loading(dcc.Graph(id="epi-forecast-summary-graph", style={"height": "350px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
                 ], width=12)
             ], className="mb-4"),
 
-            # ROW 1: Burden vs. Sequencing Correlation and Sequencing Priority
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Burden vs. Sequencing Correlation", className="mb-3"),
-                            dcc.Loading(
-                                dcc.Graph(
-                                    id="burden-coverage-scatter",
-                                    className="hep-graph",
-                                    config={"displayModeBar": True, "displaylogo": False},
-                                ),
-                                type="circle"
-                            )
-                        ])
-                    ], className="hep-card h-100 shadow-sm")
-                ], width=7),
 
+            # =========================================================================
+            # ROW 6: WHO GHO COUNTRY ELIMINATION COMPARISON TABLE (Full Width 100%)
+            # =========================================================================
+            dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             html.Div([
-                                html.H5("Sequencing Priority Ranking", className="mb-0"),
-                                dbc.Button(
-                                    "Download CSV",
-                                    id="priority-download-btn",
-                                    color="link",
-                                    className="hep-small-action-btn",
+                                html.Div([
+                                    html.H5("Country Elimination Progress & GHO Profile", className="hep-card-title d-inline mb-0"),
+                                    html.Small(" Detailed epidemiological metrics, diagnosis rates, and treatment coverage by country", className="hep-meta-text d-block mt-1")
+                                ]),
+                                html.Div([
+                                    dbc.Button("Download Data", id="btn-download-epi", color="secondary", size="sm", className="fw-bold px-3"),
+                                ], className="d-flex align-items-center mt-2 mt-sm-0"),
+                                dcc.Download(id="download-epi-data")
+                            ], className="mb-3 d-flex justify-content-between align-items-center flex-wrap"),
+                            dcc.Loading(html.Div(id="gho-data-table"), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], width=12)
+            ], className="mb-4")
+        ]),
+
+        # === TAB 3: GENOTYPES CONTENT ===
+        html.Div(id="genotypes-content", className="pb-5", style={"display": "none", "paddingBottom": "80px"}, children=[
+            
+            # =========================================================================
+            # ROW 1: SUMMARY KPIs (4 Compact Cards: 25% | 25% | 25% | 25%)
+            # =========================================================================
+            dbc.Row([
+                # Card 1: Genotypes Observed
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-dna text-primary fs-4"),
+                                    className="p-2 bg-primary-subtle text-primary rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
                                 ),
-                            ], className="hep-card-header-row"),
-                            dcc.Loading(
-                                html.Div(id="priority-ranking-table"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="hep-card h-100 shadow-sm")
-                ], width=5),
-            ], className="g-4 mb-4"),
-            
-            # ROW 2: Time Series
+                                html.Div([
+                                    html.Div("GENOTYPES OBSERVED", className="hep-filter-label mb-1"),
+                                    html.Div(id="geno-kpi-observed", className="hep-kpi-value mb-0", children="--"),
+                                    html.Div("Distinct genotypes in dataset", className="hep-meta-text mt-1")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
+                # Card 2: Dominant Genotype
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-crown text-warning fs-4"),
+                                    className="p-2 bg-warning-subtle text-warning rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
+                                ),
+                                html.Div([
+                                    html.Div("DOMINANT GENOTYPE", className="hep-filter-label mb-1"),
+                                    html.Div(id="geno-kpi-dominant", className="hep-kpi-value mb-0", children="--"),
+                                    html.Div("Most represented among sequences", className="hep-meta-text mt-1")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
+                # Card 3: Most Diverse Region
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-chart-pie text-info fs-4"),
+                                    className="p-2 bg-info-subtle text-info rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
+                                ),
+                                html.Div([
+                                    html.Div("MOST DIVERSE REGION", className="hep-filter-label mb-1"),
+                                    html.Div(id="geno-kpi-diversity", className="hep-kpi-value mb-0", children="--"),
+                                    html.Div("Highest Shannon diversity index", className="hep-meta-text mt-1")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
+                # Card 4: Recent Genotype Shift
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-arrow-trend-up text-success fs-4"),
+                                    className="p-2 bg-success-subtle text-success rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
+                                ),
+                                html.Div([
+                                    html.Div("RECENT GENOTYPE SHIFT", className="hep-filter-label mb-1"),
+                                    html.Div(id="geno-kpi-shift", className="hep-kpi-value mb-0", children="--"),
+                                    html.Div("Largest recent increase (>=2020 vs <2020)", className="hep-meta-text mt-1")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
+            ], className="g-3 mb-4"),
+
+
+            # =========================================================================
+            # ROW 2: GLOBAL GENOTYPE DISTRIBUTION MAP (100% Full Width)
+            # =========================================================================
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5(id="line-title-main", className="mb-3"),
-                            dcc.Loading(
-                                dcc.Graph(id="line-chart", style={"height": "100%"}),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
+                            html.Div([
+                                html.Div([
+                                    html.H5("Global Genotype Distribution", className="hep-card-title mb-1"),
+                                ]),
+                                html.Div([
+                                    dcc.RadioItems(
+                                        id="geno-map-mode",
+                                        options=[
+                                            {"label": "Dominant Genotype", "value": "dominant"},
+                                            {"label": "Genotype Frequency", "value": "frequency"},
+                                            {"label": "Diversity Index", "value": "diversity"},
+                                        ],
+                                        value="dominant",
+                                        className="hep-btn-group me-2",
+                                        inputClassName="btn-check",
+                                        labelClassName="btn btn-outline-secondary btn-sm",
+                                    ),
+                                    dcc.Dropdown(
+                                        id="geno-map-genotype-filter",
+                                        options=[{"label": "All Genotypes", "value": "ALL"}],
+                                        value="ALL",
+                                        clearable=False,
+                                        searchable=False,
+                                        className="hep-control-dropdown hep-control-xs d-inline-block",
+                                    )
+                                ], className="d-flex align-items-center flex-wrap gap-2 mt-2 mt-sm-0")
+                            ], className="d-flex justify-content-between align-items-center mb-3 flex-wrap"),
+                            dcc.Loading(dcc.Graph(id="geno-distribution-map-graph", style={"height": "480px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], width=12)
+            ], className="mb-4"),
+
+
+            # =========================================================================
+            # ROW 3: REGIONAL COMPOSITION + DIVERSITY RANKING (67% | 33%)
+            # =========================================================================
+            dbc.Row([
+                # Left 67% (8 cols): Genotype × Region Heatmap
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dbc.Row([
+                                dbc.Col([
+                                    html.H5("Genotype × WHO Region Heatmap", className="hep-card-title mb-1"),
+                                    html.Small("Distribution of genotypes across global WHO regions", className="hep-meta-text d-block mb-0")
+                                ], width=True),
+                                dbc.Col(
+                                    dcc.RadioItems(
+                                        id="geno-heatmap-mode",
+                                        options=[
+                                            {"label": "Within-region %", "value": "pct"},
+                                            {"label": "Sequence count", "value": "count"},
+                                        ],
+                                        value="pct",
+                                        className="hep-btn-group",
+                                        inputClassName="btn-check",
+                                        labelClassName="btn btn-outline-secondary btn-sm",
+                                    ),
+                                    width="auto"
+                                )
+                            ], className="g-2 align-items-center mb-3"),
+                            dcc.Loading(dcc.Graph(id="geno-region-heatmap-graph", style={"height": "360px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=8, className="mb-4 mb-lg-0"),
+
+                # Right 33% (4 cols): Genotype Diversity Ranking
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dbc.Row([
+                                dbc.Col([
+                                    html.H5("Genotype Diversity Ranking", className="hep-card-title mb-1"),
+                                    html.Small("Shannon Diversity Index (H') by region or country", className="hep-meta-text d-block mb-0")
+                                ], width=True),
+                                dbc.Col(
+                                    dcc.RadioItems(
+                                        id="geno-diversity-scope",
+                                        options=[
+                                            {"label": "WHO Regions", "value": "region"},
+                                            {"label": "Countries", "value": "country"},
+                                        ],
+                                        value="region",
+                                        className="hep-btn-group",
+                                        inputClassName="btn-check",
+                                        labelClassName="btn btn-outline-secondary btn-sm",
+                                    ),
+                                    width="auto"
+                                )
+                            ], className="g-2 align-items-center mb-3"),
+                            dcc.Loading(dcc.Graph(id="geno-diversity-ranking-graph", style={"height": "320px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=4),
+            ], className="g-3 mb-4 align-items-stretch"),
+
+
+            # =========================================================================
+            # ROW 4: GENOTYPE COMPOSITION THROUGH TIME (100% Full Width)
+            # =========================================================================
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.H5(id="line-title-main", className="hep-card-title mb-1"),
+                                html.Small("Temporal trajectory of genotype proportions (1963–2026)", className="hep-meta-text")
+                            ], className="mb-3"),
+                            dcc.Loading(dcc.Graph(id="line-chart", style={"height": "360px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
                 ], width=12),           
-            ], className="mb-4"),        
-            
-            # ROW 3: genotype and Country Distribution
+            ], className="mb-4"),
+
+
+            # =========================================================================
+            # ROW 5: EMERGING / CHANGING GENOTYPE SIGNALS (67% | 33%)
+            # =========================================================================
+            dbc.Row([
+                # Left 67% (8 cols): Recent vs Historical Frequency Scatter
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.H5("Recent vs. Historical Genotype Shift", className="hep-card-title mb-1"),
+                                html.Small("Comparing genotype frequencies: Historical (pre-2020) vs Recent (>=2020). Points above diagonal indicate expanding genotypes.", className="hep-meta-text")
+                            ], className="mb-3"),
+                            dcc.Loading(dcc.Graph(id="geno-scatter-signals-graph", style={"height": "350px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=8, className="mb-4 mb-lg-0"),
+
+                # Right 33% (4 cols): Recent Genotype Signals Table
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.H5("Recent Genotype Signals", className="hep-card-title mb-1"),
+                                html.Small("Genotypes with highest relative shift in recent surveillance", className="hep-meta-text")
+                            ], className="mb-3"),
+                            dcc.Loading(html.Div(id="geno-signals-table", style={"minHeight": "300px"}), type="circle")
+                        ], className="p-3 d-flex flex-column h-100")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=4),
+            ], className="g-3 mb-4 align-items-stretch"),
+
+
+            # =========================================================================
+            # ROW 6: GENOTYPE DETAIL & COUNTRY MATRIX (100% Full Width)
+            # =========================================================================
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5(id="bar-title-main", className="mb-3"),
+                            html.H5(id="bar-title-main", className="hep-card-title mb-3"),
                             dcc.Loading(
-                                dcc.Graph(id="genotype-bar-chart", style={"height": "100%"}),
+                                dcc.Graph(id="genotype-bar-chart", style={"height": "340px"}),
                                 type="circle"
                             )
-                        ])
-                    ], className="h-100 shadow-sm")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
                 ], width=6),
                 
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5("Sequences by Country and genotype", className="mb-3"),
                             dbc.Row([
-                                dbc.Col([
-                                    html.Label("Top N Countries:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="top-countries-count",
-                                        options=[{"label": str(i), "value": i} for i in [10, 15, 20, 25]],
-                                        value=10,
-                                        clearable=False,
-                                        style={"width": "150px"}
-                                    )
-                                ], width="auto")
-                            ], className="mb-3"),
+                                dbc.Col(
+                                    html.H5("Sequences by Country and Genotype", className="hep-card-title mb-0"),
+                                    width=True
+                                ),
+                                dbc.Col(
+                                    html.Div([
+                                        html.Label("Top N:", className="hep-filter-label me-2 mb-0"),
+                                        dcc.Dropdown(
+                                            id="top-countries-count",
+                                            options=[{"label": str(i), "value": i} for i in [10, 15, 20, 25]],
+                                            value=10,
+                                            clearable=False,
+                                            searchable=False,
+                                            className="hep-control-dropdown hep-control-xs d-inline-block",
+                                        )
+                                    ], className="d-flex align-items-center"),
+                                    width="auto"
+                                )
+                            ], className="g-2 align-items-center mb-3"),
                             dcc.Loading(
-                                dcc.Graph(id="country-barchart", style={"height": "100%"}),
+                                dcc.Graph(id="country-barchart", style={"height": "340px"}),
                                 type="circle"
                             )
-                        ])
-                    ], className="h-100 shadow-sm")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
                 ], width=6)
-            ], className="mb-4"),
-
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Mutation Timeline", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("Top N Mutations:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="top-mutations-count",
-                                        options=[{"label": str(i), "value": i} for i in [5, 10, 15, 20]],
-                                        value=10,
-                                        clearable=False,
-                                        style={"width": "150px"}
-                                    )
-                                ], width="auto")
-                            ], className="mb-2"),
-                            dcc.Loading(
-                                dcc.Graph(id="mutation-timeline"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=12)
-            ], className="mb-4"),
-
-            
-            # ROW 4: Epidemiology Summary
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Epidemiology Summary", className="mb-3"),
-                            dbc.Row([
-                                # Card 1: Total Prevalence
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H6("Total Prevalence", className="card-subtitle"),
-                                            html.H4(id="epi-prevalence-total", className="card-title"),
-                                            html.Small(id="epi-prevalence-trend", className="text-muted"),
-                                            html.Div([
-                                                html.I(className="bi bi-people-fill me-2"),
-                                                html.Span("Global cases", className="small")
-                                            ], className="mt-2")
-                                        ])
-                                    ], className="text-center h-100 border-start border-5 border-primary")
-                                ], width=3),
-                                
-                                # Card 2: Incidence
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H6("Annual Incidence", className="card-subtitle"),
-                                            html.H4(id="epi-incidence-total", className="card-title"),
-                                            html.Small(id="epi-incidence-trend", className="text-muted"),
-                                            html.Div([
-                                                html.I(className="bi bi-graph-up-arrow me-2"),
-                                                html.Span("New cases/year", className="small")
-                                            ], className="mt-2")
-                                        ])
-                                    ], className="text-center h-100 border-start border-5 border-warning")
-                                ], width=3),
-                                
-                                # Card 3: Deaths
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H6("Annual Deaths", className="card-subtitle"),
-                                            html.H4(id="epi-deaths-total", className="card-title"),
-                                            html.Small(id="epi-deaths-trend", className="text-muted"),
-                                            html.Div([
-                                                html.I(className="bi bi-heartbreak-fill me-2"),
-                                                html.Span("Mortality", className="small")
-                                            ], className="mt-2")
-                                        ])
-                                    ], className="text-center h-100 border-start border-5 border-danger")
-                                ], width=3),
-                                
-                                # Card 4: Coverage Gap
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H6("Sequencing Coverage", className="card-subtitle"),
-                                            html.H4(id="epi-coverage-percent", className="card-title"),
-                                            html.Small(id="epi-coverage-status", className="text-muted"),
-                                            html.Div([
-                                                html.I(className="bi bi-clipboard-data-fill me-2"),
-                                                html.Span("vs. estimated infections", className="small")
-                                            ], className="mt-2")
-                                        ])
-                                    ], className="text-center h-100 border-start border-5 border-success")
-                                ], width=3),
-                            ], className="g-3 mb-3"),
-                            
-                            # Second row with more metrics
-                            dbc.Row([
-                                # Card 5: Sex Ratio
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H6("Male:Female Ratio", className="card-subtitle"),
-                                            html.H4(id="epi-sex-ratio", className="card-title"),
-                                            html.Small("Latest year", className="text-muted")
-                                        ])
-                                    ], className="text-center h-100")
-                                ], width=2),
-                                
-                                # Card 6: Top Age Group
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H6("Most Affected Age", className="card-subtitle"),
-                                            html.H4(id="epi-top-age-group", className="card-title"),
-                                            html.Small(id="epi-age-percentage", className="text-muted")
-                                        ])
-                                    ], className="text-center h-100")
-                                ], width=2),
-                                
-                                # Card 7: Top Region
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H6("Highest Burden Region", className="card-subtitle"),
-                                            html.H4(id="epi-top-region", className="card-title"),
-                                            html.Small(id="epi-region-percentage", className="text-muted")
-                                        ])
-                                    ], className="text-center h-100")
-                                ], width=2),
-                                
-                                # Card 8: WHO 2030 Progress
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H6("WHO 2030 Target", className="card-subtitle"),
-                                            html.H4(id="epi-2030-progress", className="card-title"),
-                                            html.Small("Reduction needed", className="text-muted")
-                                        ])
-                                    ], className="text-center h-100")
-                                ], width=3),
-                                
-                                # Card 9: Quick link to epidemiology tab
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.Div([
-                                                html.I(className="bi bi-clipboard2-pulse-fill", 
-                                                       style={"fontSize": "2rem", "color": "#0d6efd"}),
-                                            ], className="mb-2"),
-                                            dbc.Button(
-                                                "View Full Analysis",
-                                                id="btn-go-to-epidemiology",
-                                                color="primary",
-                                                size="sm",
-                                                className="w-100"
-                                            )
-                                        ], className="text-center")
-                                    ], className="h-100")
-                                ], width=3),
-                            ], className="g-3"),
-                        ])
-                    ], className="shadow-sm mb-4")
-                ], width=12)
-            ], id="epidemiology-summary-row", className="mb-4"),
-            
-            # ROW 5: Mutation Summary
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5(id="mutation-section-title", className="mb-3"),  # Dynamic title
-                            html.Div(id="mutation-section-content")  # Dynamic content
-                        ])
-                    ], className="shadow-sm")
-                ], width=12)
-            ], className="mb-4", id="mutation-summary-row"),
-            
-            # ROW 6: Quick Actions (New section)
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Quick Analysis Tools", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Button(
-                                        [html.I(className="bi bi-clipboard2-pulse me-2"), "View Burden Forecast"],
-                                        id="btn-quick-forecast",
-                                        color="outline-primary",
-                                        className="w-100 mb-2 py-3"
-                                    )
-                                ], width=4),
-                                dbc.Col([
-                                    dbc.Button(
-                                        [html.I(className="bi bi-sort-numeric-down me-2"), "Sequencing Priority"],
-                                        id="btn-quick-priority",
-                                        color="outline-success",
-                                        className="w-100 mb-2 py-3"
-                                    )
-                                ], width=4),
-                                dbc.Col([
-                                    dbc.Button(
-                                        [html.I(className="bi bi-clock-history me-2"), "Mutation Timeline"],
-                                        id="btn-quick-timeline",
-                                        color="outline-warning",
-                                        className="w-100 mb-2 py-3"
-                                    )
-                                ], width=4),
-                            ], className="g-3"),
-                            html.Small("Click any button to jump to detailed analysis", className="text-muted mt-2 d-block text-center")
-                        ])
-                    ], className="shadow-sm")
-                ], width=12)
-            ], className="mb-4"),
+            ], className="g-3 mb-4"),
         ]),
 
-        # === TAB 2: MUTATIONS CONTENT (HIDDEN BY DEFAULT) ===
-        html.Div(id="mutations-content", style={"display": "none"}, children=[
-            # Mutation-specific filters
-            dbc.Row(id="mutation-filters", children=[
+        # === TAB 4: MUTATIONS CONTENT ===
+        html.Div(id="mutations-content", className="pb-5", style={"display": "none", "paddingBottom": "80px"}, children=[
+            
+            # =========================================================================
+            # ROW 1: SUMMARY KPIs (4 Compact Cards: 25% | 25% | 25% | 25%)
+            # =========================================================================
+            dbc.Row([
+                # Card 1: Unique Mutations
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-bug text-danger fs-4"),
+                                    className="p-2 bg-danger-subtle text-danger rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
+                                ),
+                                html.Div([
+                                    html.Div("MUTATIONS TRACKED", className="hep-filter-label mb-1"),
+                                    html.Div(id="mut-kpi-unique", className="hep-kpi-value mb-0", children="--"),
+                                    html.Div("Total distinct variants identified", className="hep-meta-text mt-1")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
+                # Card 2: High-Frequency Mutations
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-fire text-warning fs-4"),
+                                    className="p-2 bg-warning-subtle text-warning rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
+                                ),
+                                html.Div([
+                                    html.Div("HIGH-FREQ MUTATIONS", className="hep-filter-label mb-1"),
+                                    html.Div(id="mut-kpi-high-freq", className="hep-kpi-value mb-0", children="--"),
+                                    html.Div(">5% sequence frequency share", className="hep-meta-text mt-1")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
+                # Card 3: Countries Affected
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-globe text-primary fs-4"),
+                                    className="p-2 bg-primary-subtle text-primary rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
+                                ),
+                                html.Div([
+                                    html.Div("COUNTRIES AFFECTED", className="hep-filter-label mb-1"),
+                                    html.Div(id="mut-kpi-countries", className="hep-kpi-value mb-0", children="--"),
+                                    html.Div("Countries with detected mutations", className="hep-meta-text mt-1")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
+                # Card 4: Emerging Mutation Signals
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.Div([
+                                html.Div(
+                                    html.I(className="fa-solid fa-bolt text-success fs-4"),
+                                    className="p-2 bg-success-subtle text-success rounded-3 me-3 d-flex align-items-center justify-content-center flex-shrink-0",
+                                    style={"width": "44px", "height": "44px"}
+                                ),
+                                html.Div([
+                                    html.Div("EMERGING SIGNALS", className="hep-filter-label mb-1"),
+                                    html.Div(id="mut-kpi-signals", className="hep-kpi-value mb-0", children="--"),
+                                    html.Div("Recent increasing trend (>=2020 vs <2020)", className="hep-meta-text mt-1")
+                                ])
+                            ], className="d-flex align-items-center")
+                        ], className="p-3"),
+                        className="hep-kpi-card shadow-sm border-0 bg-white rounded-3 h-100"
+                    ),
+                    xs=12, sm=6, lg=3, className="mb-3 mb-lg-0"
+                ),
+            ], className="g-3 mb-4"),
+
+
+            # =========================================================================
+            # ROW 2: MUTATION EXPLORER TABLE & TOP FILTERS (100% Full Width)
+            # =========================================================================
+            dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
+                            html.Div([
+                                html.H5("Mutation Explorer", className="hep-card-title mb-1"),
+                                html.Small("Filter, search, and interrogate functional mutation variants across genes and drugs", className="hep-meta-text mb-3 d-block")
+                            ]),
+
+                            # Filters row
                             dbc.Row([
                                 dbc.Col([
-                                    html.Label("Mutation Type:", className="fw-bold me-2"),
+                                    html.Label("Mutation Type:", className="hep-filter-label me-2 mb-0"),
                                     dcc.Dropdown(
                                         id="mutation-type-filter",
                                         options=[
@@ -3521,334 +4509,218 @@ def create_dashboard_layout():
                                             {"label": "Substitutions of Interest", "value": "substitution_of_interest"},
                                             {"label": "No Resistance", "value": "no_resistance"}
                                         ],
-                                        value="all",
-                                        clearable=False,
-                                        style={"width": "250px"}
+                                        value="all", clearable=False, searchable=False, className="hep-control-dropdown hep-control-sm",
                                     )
-                                ], width=3),
-                                
+                                ], width="auto", className="d-flex align-items-center me-2"),
                                 dbc.Col([
-                                    html.Label("Gene/Drug:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="mutation-category-filter",
-                                        options=[],
-                                        placeholder="Select category...",
-                                        style={"width": "250px"}
-                                    )
-                                ], width=3),
-                                
+                                    html.Label("Gene/Drug:", className="hep-filter-label me-2 mb-0"),
+                                    dcc.Dropdown(id="mutation-category-filter", options=[],
+                                                  placeholder="Select category...", className="hep-control-dropdown hep-control-sm")
+                                ], width="auto", className="d-flex align-items-center me-2"),
                                 dbc.Col([
-                                    html.Label("Show Top:", className="fw-bold me-2"),
+                                    html.Label("Show Top:", className="hep-filter-label me-2 mb-0"),
                                     dcc.Dropdown(
                                         id="mutation-top-n",
                                         options=[{"label": str(i), "value": i} for i in [10, 20, 30, 50]],
-                                        value=20,
-                                        clearable=False,
-                                        style={"width": "150px"}
+                                        value=20, clearable=False, searchable=False, className="hep-control-dropdown hep-control-xs",
                                     )
-                                ], width=3),
-                                
+                                ], width="auto", className="d-flex align-items-center me-2"),
                                 dbc.Col([
-                                    html.Label("Group By:", className="fw-bold me-2"),
+                                    html.Label("Group By:", className="hep-filter-label me-2 mb-0"),
                                     dcc.RadioItems(
                                         id="mutation-group-by",
-                                        options=[
-                                            {"label": " Type", "value": "type"},
-                                            {"label": " Drug", "value": "drug"},
-                                            {"label": " Gene", "value": "gene"}
-                                        ],
-                                        value="type",
-                                        inline=True,
-                                        style={"marginTop": "8px"}
+                                        options=[{"label": " Type", "value": "type"}, {"label": " Drug", "value": "drug"}, {"label": " Gene", "value": "gene"}],
+                                        value="type", inline=True, className="hep-btn-group"
                                     )
-                                ], width=3),
-                            ], className="g-3 mb-3"),
-                        ])
-                    ], className="shadow-sm")
+                                ], width="auto", className="d-flex align-items-center me-2"),
+                                dbc.Col([
+                                    dbc.Button("Download CSV", id="btn-download-mutations", color="secondary",
+                                               size="sm", className="float-end fw-bold")
+                                ], width="auto", className="ms-auto")
+                            ], className="g-2 mb-3 align-items-center"),
+
+                            dcc.Loading(html.Div(id="mutation-details-table"), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
                 ], width=12)
             ], className="mb-4"),
-            
-            # Mutation Visualizations
+
+
+            # =========================================================================
+            # ROW 3: MUTATION DISTRIBUTION & MAP (67% | 33% Side-by-Side)
+            # =========================================================================
             dbc.Row([
+                # Left 67% (8 cols): Mutation Prevalence Over Time
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5("Mutation Frequency", className="mb-3"),
-                            dcc.Loading(
-                                dcc.Graph(id="mutation-frequency-chart"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=8),
-                
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Mutation Types", className="mb-3"),
-                            dcc.Loading(
-                                dcc.Graph(id="mutation-distribution-chart"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="h-100 shadow-sm")
-                ], width=4),
-            ], className="mb-4"),
-                        
-            # Mutation Details Table
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.Div([
-                                html.H5("Mutation Details", className="d-inline mb-0"),
-                                dbc.Button(
-                                    "Back to Overview",
-                                    id="btn-back-to-overview-from-mutations",
-                                    color="primary",
-                                    size="sm",
-                                    className="float-end"
-                                ),
-                                dbc.Button(
-                                    "Download CSV",
-                                    id="btn-download-mutations",
-                                    color="secondary",
-                                    size="sm",
-                                    className="float-end me-2"
+                            dbc.Row([
+                                dbc.Col([
+                                    html.H5("Mutation Prevalence Over Time", className="hep-card-title mb-1"),
+                                    html.Small("Temporal trajectory of mutation frequency among available sequences", className="hep-meta-text d-block mb-0")
+                                ], width=True),
+                                dbc.Col(
+                                    html.Div([
+                                        html.Label("Top:", className="hep-filter-label me-2 mb-0"),
+                                        dcc.Dropdown(
+                                            id="top-mutations-count",
+                                            options=[{"label": str(i), "value": i} for i in [5, 10, 15, 20]],
+                                            value=10, clearable=False, searchable=False, className="hep-control-dropdown hep-control-xs",
+                                        )
+                                    ], className="d-flex align-items-center"),
+                                    width="auto"
                                 )
-                            ], className="mb-3"),
-                            html.Div(id="mutation-details-table")
-                        ])
-                    ], className="shadow-sm")
-                ], width=12)
-            ], className="mb-4"),
-        ]),
-        # === TAB 2: MUTATIONS CONTENT (HIDDEN BY DEFAULT) ===
-        html.Div(id="epidemiology-content", style={"display": "none"}, children=[
-            # GHO Controls Row
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("Select Metric:", className="fw-bold me-2"),
-                                    dcc.Dropdown(
-                                        id="epi-metric-dropdown",
-                                        options=[
-                                            {"label": "People living with infection", "value": "livingwith_num"},
-                                            {"label": "New infections", "value": "new_infections_num"},
-                                            {"label": "Deaths", "value": "deaths_num"},
-                                            {"label": "Prevalence %", "value": "prevalence_pct"},
-                                            {"label": "Diagnosis rate %", "value": "diagnosis_rate_pct"},
-                                            {"label": "Treatment rate %", "value": "treatment_rate_diagnosed_pct"},
-                                            {"label": "HBV vaccine coverage % (HepB3)", "value": "vaccine_hepb3_coverage_pct"}
-                                        ],
-                                        value="prevalence_pct",
-                                        clearable=False,
-                                        className="hep-dropdown"
-                                    )
-                                ], xs=12, md=6, lg=4),
-                            ], className="g-3 align-items-center")
-                        ])
-                    ], className="mb-4 shadow-sm border-0")
-                ], width=12)
-            ], id="epi-controls-row", style={"position": "relative", "zIndex": 1050}),
+                            ], className="g-2 align-items-center mb-3"),
+                            dcc.Loading(dcc.Graph(id="mutation-timeline", style={"height": "360px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=8, className="mb-4 mb-lg-0"),
 
-            # Row 1: Map
-            dbc.Row([
+                # Right 33% (4 cols): Geographic Distribution Map of Selected Mutation
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5("Global Epidemiological Burden", className="mb-3"),
-                            dcc.Loading(
-                                dcc.Graph(id="gho-burden-map"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="shadow-sm border-0 h-100")
-                ], width=12),
-            ], className="mb-4"),
-
-            # Row 2: Cascade and Forecast Chart Side-by-Side
-            dbc.Row([
-                # Diagnosis & Treatment Cascade
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Diagnosis & Treatment Cascade", className="mb-3"),
-                            dcc.Loading(
-                                dcc.Graph(id="gho-cascade-chart"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="shadow-sm border-0 h-100")
-                ], xs=12, lg=6, className="mb-4 mb-lg-0"),
-                
-                # Forecast Chart
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("Burden Forecast with Projections", className="mb-3"),
-                            dcc.Loading(
-                                dcc.Graph(
-                                    id="forecast-chart",
-                                    className="hep-graph",
-                                    config={"displayModeBar": True, "displaylogo": False},
-                                ),
-                                type="circle"
-                            )
-                        ])
-                    ], className="shadow-sm border-0 h-100")
-                ], xs=12, lg=6)
-            ], className="mb-4"),
-
-            # Section: Program Response vs Burden
-            dbc.Row([
-                dbc.Col([
-                    html.H4("Program Response vs Burden", className="text-white mt-4 mb-3 fw-bold")
-                ], width=12)
-            ]),
-
-            # Row 3: HBV Indicators & Priority Table
-            dbc.Row([
-                # HBV Left Plot
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("HBV Vaccine Coverage vs Disease Burden", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Label("Y-Axis Burden Metric:", className="small fw-bold text-muted mb-1"),
-                                    dcc.Dropdown(
-                                        id="hbv-y-metric",
-                                        options=[
-                                            {"label": "Prevalence %", "value": "hbv_prevalence_pct"},
-                                            {"label": "New Infections", "value": "hbv_new_infections_num"},
-                                            {"label": "Living with HBV", "value": "hbv_livingwith_num"}
-                                        ],
-                                        value="hbv_prevalence_pct",
-                                        clearable=False,
-                                        className="hep-dropdown mb-3"
-                                    )
-                                ], width=12)
+                            html.Div([
+                                html.H5("Geographic Distribution", className="hep-card-title mb-1"),
+                                html.Small("Country-level frequency share of mutations", className="hep-meta-text mb-3 d-block")
                             ]),
-                            dcc.Loading(
-                                dcc.Graph(id="hbv-epi-trend-plot"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="shadow-sm border-0 h-100")
-                ], xs=12, lg=6, className="mb-4 mb-lg-0"),
-                
-                # HBV Right Table
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardBody([
-                            html.H5("HBV Country Priority Ranking", className="mb-3"),
-                            dcc.Loading(
-                                html.Div(id="hbv-epi-priority-table"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="shadow-sm border-0 h-100")
-                ], xs=12, lg=6)
-            ], id="hbv-epi-trends-row", className="mb-4", style={"display": "none"}),
+                            dcc.Loading(dcc.Graph(id="mut-geo-map-graph", style={"height": "360px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=4),
+            ], className="g-3 mb-4 align-items-stretch"),
 
-            # Row 4: HCV Indicators & Priority Table
+
+            # =========================================================================
+            # ROW 4: PROTEIN POSITION / HOTSPOTS LOLLIPOP PLOT (100% Full Width)
+            # =========================================================================
             dbc.Row([
-                # HCV Left Plot
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5("HCV Diagnosis/Treatment Access vs Disease Burden", className="mb-3"),
                             dbc.Row([
                                 dbc.Col([
-                                    html.Label("X-Axis Access Metric:", className="small fw-bold text-muted mb-1"),
-                                    dcc.Dropdown(
-                                        id="hcv-x-metric",
+                                    html.H5("Protein / Genome Position Hotspots (Lollipop Plot)", className="hep-card-title mb-1"),
+                                    html.Small("Amino-acid position vs mutation frequency (≥5%) across protein targets", className="hep-meta-text d-block mb-0")
+                                ], width=True),
+                                dbc.Col(
+                                    dcc.RadioItems(
+                                        id="mut-protein-selector",
                                         options=[
-                                            {"label": "Diagnosis Rate %", "value": "hcv_diagnosis_rate_pct"},
-                                            {"label": "Treatment Rate %", "value": "hcv_treatment_rate_diagnosed_pct"}
+                                            {"label": "All Targets", "value": "ALL"},
+                                            {"label": "HBsAg", "value": "HBsAg"},
+                                            {"label": "Polymerase", "value": "Polymerase"},
+                                            {"label": "Core", "value": "Core"},
+                                            {"label": "X", "value": "X"},
                                         ],
-                                        value="hcv_diagnosis_rate_pct",
-                                        clearable=False,
-                                        className="hep-dropdown mb-3"
-                                    )
-                                ], xs=12, md=6),
-                                dbc.Col([
-                                    html.Label("Y-Axis Burden Metric:", className="small fw-bold text-muted mb-1"),
-                                    dcc.Dropdown(
-                                        id="hcv-y-metric",
-                                        options=[
-                                            {"label": "Prevalence %", "value": "hcv_prevalence_pct"},
-                                            {"label": "New Infections", "value": "hcv_new_infections_num"},
-                                            {"label": "Living with HCV", "value": "hcv_livingwith_num"}
-                                        ],
-                                        value="hcv_prevalence_pct",
-                                        clearable=False,
-                                        className="hep-dropdown mb-3"
-                                    )
-                                ], xs=12, md=6)
-                            ]),
-                            dcc.Loading(
-                                dcc.Graph(id="hcv-epi-trend-plot"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="shadow-sm border-0 h-100")
-                ], xs=12, lg=6, className="mb-4 mb-lg-0"),
-                
-                # HCV Right Table
+                                        value="ALL",
+                                        className="hep-btn-group",
+                                        inputClassName="btn-check",
+                                        labelClassName="btn btn-outline-secondary btn-sm",
+                                    ),
+                                    width="auto"
+                                )
+                            ], className="g-2 align-items-center mb-3"),
+                            dcc.Loading(dcc.Graph(id="mut-lollipop-graph", style={"height": "360px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], width=12)
+            ], className="mb-4"),
+
+
+            # =========================================================================
+            # ROW 5: FUNCTIONAL SIGNIFICANCE (67% | 33%)
+            # =========================================================================
+            dbc.Row([
+                # Left 67% (8 cols): Functional Category Summary Bar
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
-                            html.H5("HCV Country Priority Ranking", className="mb-3"),
-                            dcc.Loading(
-                                html.Div(id="hcv-epi-priority-table"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="shadow-sm border-0 h-100")
-                ], xs=12, lg=6)
-            ], id="hcv-epi-trends-row", className="mb-4", style={"display": "none"}),
+                            html.Div([
+                                html.H5("Functional Significance Summary", className="hep-card-title mb-1"),
+                                html.Small("Distribution of mutations by clinical & biological impact (Drug Resistance, Vaccine Escape, Substitutions)", className="hep-meta-text mb-3 d-block")
+                            ]),
+                            dcc.Loading(dcc.Graph(id="mutation-frequency-chart", style={"height": "350px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=8, className="mb-4 mb-lg-0"),
 
-            # Row 5: Detailed DataTable
+                # Right 33% (4 cols): High-Priority Mutation Table
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.H5("High-Priority Mutations", className="hep-card-title mb-1"),
+                                html.Small("Curated antiviral resistance & vaccine escape variants", className="hep-meta-text mb-3 d-block")
+                            ]),
+                            dcc.Loading(html.Div(id="mut-priority-table", style={"minHeight": "300px"}), type="circle")
+                        ], className="p-3 d-flex flex-column h-100")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=4),
+            ], className="g-3 mb-4 align-items-stretch"),
+
+
+            # =========================================================================
+            # ROW 6: GENOTYPE ASSOCIATION + CO-OCCURRENCE (67% | 33%)
+            # =========================================================================
+            dbc.Row([
+                # Left 67% (8 cols): Mutation x Genotype Heatmap
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.H5("Mutation × Genotype Association Heatmap", className="hep-card-title mb-1"),
+                                html.Small("Prevalence of specific mutations across viral genotypes", className="hep-meta-text mb-3 d-block")
+                            ]),
+                            dcc.Loading(dcc.Graph(id="mut-genotype-heatmap-graph", style={"height": "350px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=8, className="mb-4 mb-lg-0"),
+
+                # Right 33% (4 cols): Common Co-occurrences Table
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.H5("Co-Occurring Mutations", className="hep-card-title mb-1"),
+                                html.Small("Frequent mutation pairs co-detected in single genomes", className="hep-meta-text mb-3 d-block")
+                            ]),
+                            dcc.Loading(html.Div(id="mut-cooccurrence-table", style={"minHeight": "300px"}), type="circle")
+                        ], className="p-3 d-flex flex-column h-100")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
+                ], lg=4),
+            ], className="g-3 mb-4 align-items-stretch"),
+
+
+            # =========================================================================
+            # ROW 7: EMERGING MUTATION SIGNALS (100% Full Width)
+            # =========================================================================
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
                         dbc.CardBody([
                             html.Div([
-                                html.H5("WHO GHO Country Profile Data", className="d-inline mb-0"),
-                                html.Div([
-                                    dbc.Button(
-                                        "Back to Overview",
-                                        id="btn-back-to-overview-from-epi",
-                                        color="primary",
-                                        size="sm",
-                                        className="me-2"
-                                    ),
-                                    dbc.Button(
-                                        "Download Data",
-                                        id="btn-download-epi",
-                                        color="secondary",
-                                        size="sm",
-                                    ),
-                                ], className="d-flex align-items-center"),
-                                dcc.Download(id="download-epi-data")
-                            ], className="mb-3 d-flex justify-content-between align-items-center flex-wrap"),
-                            dcc.Loading(
-                                html.Div(id="gho-data-table"),
-                                type="circle"
-                            )
-                        ])
-                    ], className="shadow-sm border-0")
+                                html.H5("Emerging Mutation Signals", className="hep-card-title mb-1"),
+                                html.Small("Historical (pre-2020) vs Recent (>=2020) frequency comparison. Points above diagonal indicate expanding resistance/escape variants.", className="hep-meta-text mb-3 d-block")
+                            ]),
+                            dcc.Loading(dcc.Graph(id="mut-emerging-signals-graph", style={"height": "360px"}), type="circle")
+                        ], className="p-3")
+                    ], className="shadow-sm border-0 bg-white rounded-3 h-100")
                 ], width=12)
             ], className="mb-4")
         ]),
+        
+        # === TAB 5: USER SEQUENCE SUBMISSION ===
+        html.Div(
+            user_seq_tab_content(),
+            className="mx-auto px-2",
+            style={
+                "maxWidth": "1400px",
+                "width": "100%",
+            },
+        ),
 
-        # === TAB 4: USER SEQUENCE SUBMISSION ===
-        user_seq_tab_content(),
+
 
         # Footer
         html.Footer([
@@ -3889,11 +4761,19 @@ def create_dashboard_layout():
             ], fluid=True)
         ], className="bg-light py-4 mt-5 border-top", 
            style={"marginTop": "2rem !important"}),
-
-                ],
-            ),
-        ],
+    ]
+    return html.Div(
+        id="hep-dashboard-shell-container",
+        className="hep-dashboard-shell px-4 py-3",
+        children=[
+            stores,
+            html.Main(
+                style={"width": "100%", "flex": "1"},
+                children=main_children
+            )
+        ]
     )
+
     
 # === STATE STORES ==============================================================
 # — Year bounds & dropdown option lists (fast) —
@@ -3948,7 +4828,7 @@ def compute_filtered_store(virus, year_range, regions, countries, genotypes):
     if genotypes:
         df = df[df["genotype"].isin(genotypes)]
 
-    light = df[["Country_standard", "WHO_Regions", "Year", "genotype"]].copy()
+    light = df[["ID", "Country_standard", "WHO_Regions", "Year", "genotype"]].copy()
     return _df_to_json(light)
 
 
@@ -4047,48 +4927,20 @@ def compute_ihme_latest_store(virus, metric, year_range, regions, countries):
     
     return _df_to_json(df)
     
-# Overview Page Forecast Chart Callback
-@callback(
-    Output("forecast-chart", "figure"),
-    Input("selected-virus", "data"),
-    Input("continent-dropdown", "value"),
-    Input("country-dropdown", "value"),
-)
-def update_overview_forecast_chart(virus, regions, countries):
-    data = get_data_store()
-    ihme_df = data.get("ihme_df", pd.DataFrame())
-    if ihme_df.empty:
-        return _empty_plot("No historical GBD data available")
-        
-    fig = create_forecast_chart(
-        ihme_df=ihme_df,
-        selected_virus=virus,
-        sex="Both",
-        selected_regions=regions,
-        selected_countries=countries
-    )
-    
-    # Apply dark theme styling
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="rgba(255,255,255,0.7)"),
-    )
-    return fig
 
 # — Indicator values —
 @callback(
     Output("indicator-total", "children"),
     Output("indicator-countries", "children"),
     Output("indicator-genotypes", "children"),
-    Output("indicator-mutations", "children"),
+    Output("indicator-years", "children"),
     Input("filtered-store", "data"),
     Input("selected-virus", "data"),
 )
 def update_indicators(filtered_json, selected_virus):
     df = _df_from_json(filtered_json)
     if df is None or df.empty:
-        return "0", "0", "0", "0"
+        return "0", "0", "0", "N/A"
 
     total_genomes = len(df)
     unique_countries = df.get("Country_standard", pd.Series(dtype="object")).nunique()
@@ -4097,24 +4949,33 @@ def update_indicators(filtered_json, selected_virus):
     recomb_mask = g.str.contains(r"recomb", case=False, na=False)
     base_genotype_count = g[~recomb_mask].dropna().nunique()
 
-    data = get_data_store()
-    selected_virus = selected_virus or "HBV"
-    if selected_virus == "HBV":
-        mut_df = data.get("hbv_mut", pd.DataFrame())
-    elif selected_virus == "HCV":
-        mut_df = data.get("hcv_mut", pd.DataFrame())
-    elif selected_virus == "HEV":
-        mut_df = data.get("hev_mut", pd.DataFrame())
-    else:
-        mut_df = pd.DataFrame()
+    date_col = None
+    for c in ["Year", "year", "Release_Date", "Collection_Date", "Date"]:
+        if c in df.columns:
+            date_col = c
+            break
 
-    mutation_count = mut_df["mutation"].nunique() if not mut_df.empty and "mutation" in mut_df.columns else 0
+    year_range_str = "1963–2025"
+    if date_col:
+        try:
+            s = df[date_col].dropna()
+            numeric_years = pd.to_numeric(s, errors="coerce").dropna()
+            numeric_years = numeric_years[(numeric_years >= 1900) & (numeric_years <= 2030)]
+            if not numeric_years.empty:
+                year_range_str = f"{int(numeric_years.min())}–{int(numeric_years.max())}"
+            else:
+                dates = pd.to_datetime(s, errors="coerce").dt.year.dropna()
+                dates = dates[(dates >= 1900) & (dates <= 2030)]
+                if not dates.empty:
+                    year_range_str = f"{int(dates.min())}–{int(dates.max())}"
+        except Exception:
+            pass
 
     return (
         f"{total_genomes:,}",
         f"{unique_countries:,}",
         f"{base_genotype_count:,}",
-        f"{mutation_count:,}",
+        year_range_str,
     )
 
 
@@ -4154,7 +5015,15 @@ def update_dashboard_heading(virus, active_tab, filtered_json):
 
     title = f"{virus_label} {section}"
     if section == "Overview":
-        subtitle = f"{sequence_count:,} sequences · {mutation_count:,} mutations · Active surveillance"
+        last_updated = "2026-08-02"
+        if df is not None and not df.empty:
+            for dcol in ["Release_Date", "Collection_Date", "Date", "date", "created_at"]:
+                if dcol in df.columns:
+                    valid_dates = pd.to_datetime(df[dcol], errors="coerce").dropna()
+                    if not valid_dates.empty:
+                        last_updated = valid_dates.max().strftime("%Y-%m-%d")
+                        break
+        subtitle = f"Last updated: {last_updated}"
     elif section == "Mutations":
         subtitle = f"{mutation_count:,} detected mutation markers · {sequence_count:,} filtered sequences"
     elif section == "Epidemiology":
@@ -4485,13 +5354,13 @@ def update_mutation_section(filtered_json, selected_virus, regions, countries, y
                 dbc.ButtonGroup([
                     dbc.Button(
                         [html.I(className="bi bi-arrow-right me-2"), "View Detailed Mutation Analysis"],
-                        id="btn-go-to-mutations",
+                        id="hbv-btn-go-to-mutations",
                         color="primary",
                         size="lg"
                     ),
                     dbc.Button(
                         [html.I(className="bi bi-download me-2"), "Download Mutation Report"],
-                        id="btn-download-mutation-report",
+                        id="hbv-btn-download-mutation-report",
                         color="secondary",
                         size="lg"
                     ),
@@ -4636,9 +5505,9 @@ def get_hcv_mutation_content():
                             html.I(className="bi bi-virus text-primary", 
                                    style={"fontSize": "2rem", "marginBottom": "10px"}),
                         ], className="text-center mb-2"),
-                        html.H4(id="mutation-samples-count", className="card-title text-center mb-1"),
+                        html.H4(id="hcv-mutation-samples-count", className="card-title text-center mb-1"),
                         html.H6("Samples with Mutations", className="card-subtitle text-center text-muted mb-2"),
-                        html.Small(id="mutation-coverage-percent", className="text-center d-block text-success")
+                        html.Small(id="hcv-mutation-coverage-percent", className="text-center d-block text-success")
                     ])
                 ], className="text-center h-100 border-start border-5 border-primary shadow-sm")
             ], width=3),
@@ -4651,9 +5520,9 @@ def get_hcv_mutation_content():
                             html.I(className="bi bi-shield-exclamation text-danger", 
                                    style={"fontSize": "2rem", "marginBottom": "10px"}),
                         ], className="text-center mb-2"),
-                        html.H4(id="antiviral-resistance-count", className="card-title text-center mb-1"),
+                        html.H4(id="hcv-antiviral-resistance-count", className="card-title text-center mb-1"),
                         html.H6("Antiviral Resistance", className="card-subtitle text-center text-muted mb-2"),
-                        html.Small(id="resistance-percentage", className="text-center d-block")
+                        html.Small(id="hcv-resistance-percentage", className="text-center d-block")
                     ])
                 ], className="text-center h-100 border-start border-5 border-danger shadow-sm")
             ], width=3),
@@ -4681,9 +5550,9 @@ def get_hcv_mutation_content():
                             html.I(className="bi bi-bar-chart-fill text-success", 
                                    style={"fontSize": "2rem", "marginBottom": "10px"}),
                         ], className="text-center mb-2"),
-                        html.H4(id="top-mutation-name", className="card-title text-center mb-1"),
+                        html.H4(id="hcv-top-mutation-name", className="card-title text-center mb-1"),
                         html.H6("Most Common Mutation", className="card-subtitle text-center text-muted mb-2"),
-                        html.Small(id="top-mutation-percentage", className="text-center d-block")
+                        html.Small(id="hcv-top-mutation-percentage", className="text-center d-block")
                     ])
                 ], className="text-center h-100 border-start border-5 border-success shadow-sm")
             ], width=3),
@@ -4696,7 +5565,7 @@ def get_hcv_mutation_content():
                     dbc.CardBody([
                         html.H6("Mutation Types Distribution", className="card-subtitle mb-3"),
                         dcc.Loading(
-                            dcc.Graph(id="mutation-type-pie", config={'displayModeBar': False}),
+                            dcc.Graph(id="hcv-mutation-type-pie", config={'displayModeBar': False}),
                             type="circle"
                         )
                     ])
@@ -4708,14 +5577,14 @@ def get_hcv_mutation_content():
                     dbc.CardBody([
                         html.H6("Quick Insights", className="card-subtitle mb-3"),
                         html.Ul([
-                            html.Li(id="insight-1", className="mb-2"),
-                            html.Li(id="insight-2", className="mb-2"),
-                            html.Li(id="insight-3", className="mb-2"),
+                            html.Li(id="hcv-insight-1", className="mb-2"),
+                            html.Li(id="hcv-insight-2", className="mb-2"),
+                            html.Li(id="hcv-insight-3", className="mb-2"),
                         ], className="list-unstyled"),
                         html.Div([
                             html.Small("Based on current filters", className="text-muted"),
                             html.Br(),
-                            html.Small(id="mutation-data-range", className="text-muted")
+                            html.Small(id="hcv-mutation-data-range", className="text-muted")
                         ], className="mt-3")
                     ])
                 ], className="h-100 shadow-sm")
@@ -4728,13 +5597,13 @@ def get_hcv_mutation_content():
                 dbc.ButtonGroup([
                     dbc.Button(
                         [html.I(className="bi bi-arrow-right me-2"), "View Detailed Mutation Analysis"],
-                        id="btn-go-to-mutations",
+                        id="hcv-btn-go-to-mutations",
                         color="primary",
                         size="lg"
                     ),
                     dbc.Button(
                         [html.I(className="bi bi-download me-2"), "Download Mutation Report"],
-                        id="btn-download-mutation-report",
+                        id="hcv-btn-download-mutation-report",
                         color="secondary",
                         size="lg"
                     ),
@@ -5046,129 +5915,90 @@ def render_mutation_bar(filtered_json, selected_filter, virus):
 # === TAB NAVIGATION CALLBACKS ===
 # === TAB NAVIGATION CALLBACKS ===
 @callback(
-    Output("tab-overview", "color"),
-    Output("tab-mutations", "color"),
-    Output("tab-epidemiology", "color"),
-    Output("tab-user-seq", "color"),
     Output("tab-overview", "className"),
-    Output("tab-mutations", "className"),
     Output("tab-epidemiology", "className"),
+    Output("tab-genotypes", "className"),
+    Output("tab-mutations", "className"),
     Output("tab-user-seq", "className"),
     Output("tab-mutations", "disabled"),
     Output("active-tab-store", "data"),
     
     # Inputs
-    Input("url", "pathname"),
     Input("tab-overview", "n_clicks"),
-    Input("tab-mutations", "n_clicks"),
     Input("tab-epidemiology", "n_clicks"),
+    Input("tab-genotypes", "n_clicks"),
+    Input("tab-mutations", "n_clicks"),
     Input("tab-user-seq", "n_clicks"),
+    Input("btn-goto-priority-tab", "n_clicks"),
     Input("selected-virus", "data"),
-    
-    # States to track initial load
-    State("tab-overview", "n_clicks"),
-    State("tab-mutations", "n_clicks"),
-    State("tab-epidemiology", "n_clicks"),
+    State("url", "pathname"),
+    prevent_initial_call=True
 )
-def update_tab_highlights(pathname, overview_clicks, mutations_clicks, epidemiology_clicks,
-                          user_seq_clicks, selected_virus,
-                          overview_state, mutations_state, epidemiology_state):
+def update_tab_highlights(overview_clicks, epidemiology_clicks, genotypes_clicks,
+                          mutations_clicks, user_seq_clicks, priority_goto_clicks, selected_virus, pathname):
     ctx = callback_context
     mutations_disabled = selected_virus == "HEV" if selected_virus else False
 
     if pathname not in ["/", "/dashboard"]:
-        # Deactivate all dashboard tabs on non-dashboard pages
-        print(f"DEBUG: update_tab_highlights called. pathname={pathname}. Return overview (inactive).")
-        return ("link", "link", "link", "link", 
-                "hep-nav-item", "hep-nav-item" + (" hep-nav-disabled" if mutations_disabled else ""), "hep-nav-item", "hep-nav-item", mutations_disabled, "overview")
+        return ("hep-section-tab-btn", "hep-section-tab-btn", "hep-section-tab-btn",
+                "hep-section-tab-btn" + (" disabled" if mutations_disabled else ""),
+                "hep-section-tab-btn", mutations_disabled, "overview")
 
-    # Determine active tab using modern triggered_id
     trigger_id = ctx.triggered_id
     active_tab = "overview"
     if trigger_id == "tab-overview":
         active_tab = "overview"
+    elif trigger_id in ["tab-epidemiology", "btn-goto-priority-tab"]:
+        active_tab = "epidemiology"
+    elif trigger_id == "tab-genotypes":
+        active_tab = "genotypes"
     elif trigger_id == "tab-mutations" and not mutations_disabled:
         active_tab = "mutations"
-    elif trigger_id == "tab-epidemiology":
-        active_tab = "epidemiology"
     elif trigger_id == "tab-user-seq":
         active_tab = "user-seq"
-    elif trigger_id == "selected-virus":
-        active_tab = "overview"
     else:
         active_tab = "overview"
 
-    colors = []
     classes = []
-    for t in ["overview", "mutations", "epidemiology", "user-seq"]:
-        colors.append("link")
+    for t in ["overview", "epidemiology", "genotypes", "mutations", "user-seq"]:
         if t == "mutations" and mutations_disabled:
-            classes.append("hep-nav-item hep-nav-disabled")
+            classes.append("hep-section-tab-btn disabled")
         elif t == active_tab:
-            classes.append("hep-nav-item hep-nav-active")
+            classes.append("hep-section-tab-btn active")
         else:
-            classes.append("hep-nav-item")
+            classes.append("hep-section-tab-btn")
 
-    print(f"DEBUG: update_tab_highlights finalized active_tab={active_tab}")
-    return (*colors, *classes, mutations_disabled, active_tab)
+    return (*classes, mutations_disabled, active_tab)
 
 
-# Client-side tab switching callback to avoid nonexistent DOM errors on page loading/switching
+# Client-side tab switching callback
 dash.clientside_callback(
     """
     function(activeTab, pathname, overviewId) {
-        // If we are not on the dashboard page, do nothing to prevent nonexistent object errors
         if (pathname !== "/" && pathname !== "/dashboard") {
             return [
-                window.dash_clientside.no_update, 
-                window.dash_clientside.no_update, 
-                window.dash_clientside.no_update, 
-                window.dash_clientside.no_update, 
-                window.dash_clientside.no_update,
-                window.dash_clientside.no_update,
-                window.dash_clientside.no_update
-            ];
-        }
-        
-        // Verify that the elements actually exist in the DOM before trying to update them
-        const overview = document.getElementById("overview-content");
-        if (!overview) {
-            return [
-                window.dash_clientside.no_update, 
-                window.dash_clientside.no_update, 
-                window.dash_clientside.no_update, 
-                window.dash_clientside.no_update, 
-                window.dash_clientside.no_update,
-                window.dash_clientside.no_update,
-                window.dash_clientside.no_update
+                {"display": "none"}, {"display": "none"}, {"display": "none"}, {"display": "none"}, {"display": "none"}
             ];
         }
         
         const showBlock = {"display": "block"};
-        const showCommonFilters = {"display": "block", "position": "relative", "zIndex": 1100};
-        const showFlex = {"display": "flex"};
         const hide = {"display": "none"};
-        
         const active = activeTab || "overview";
         
         return [
             active === "overview" ? showBlock : hide,
-            active === "mutations" ? showBlock : hide,
             active === "epidemiology" ? showBlock : hide,
-            active === "user-seq" ? showBlock : hide,
-            active === "user-seq" ? hide : showCommonFilters,
-            (active !== "epidemiology" && active !== "user-seq") ? showFlex : hide,
-            active === "epidemiology" ? showFlex : hide
+            active === "genotypes" ? showBlock : hide,
+            active === "mutations" ? showBlock : hide,
+            active === "user-seq" ? showBlock : hide
         ];
     }
     """,
     Output("overview-content", "style"),
-    Output("mutations-content", "style"),
     Output("epidemiology-content", "style"),
+    Output("genotypes-content", "style"),
+    Output("mutations-content", "style"),
     Output("user-seq-content", "style"),
-    Output("common-filters", "style"),
-    Output("overview-summary-cards-row", "style"),
-    Output("epi-summary-cards-row", "style"),
     Input("active-tab-store", "data"),
     Input("url", "pathname"),
     Input("overview-content", "id"),
@@ -5176,42 +6006,7 @@ dash.clientside_callback(
 )
 
 
-# Client-side callback to route quick/back buttons to global tab clicks
-dash.clientside_callback(
-    """
-    function(back_mut, back_epi, go_epi, quick_forecast, quick_priority, quick_timeline) {
-        const ctx = window.dash_clientside.callback_context;
-        if (!ctx.triggered || ctx.triggered.length === 0) {
-            return window.dash_clientside.no_update;
-        }
-        const trigger = ctx.triggered[0];
-        if (!trigger || trigger.value === null || trigger.value === undefined || trigger.value === 0) {
-            return window.dash_clientside.no_update;
-        }
-        const trigger_id = trigger.prop_id.split('.')[0];
-        
-        if (trigger_id === 'btn-back-to-overview-from-mutations' || trigger_id === 'btn-back-to-overview-from-epi') {
-            const btn = document.getElementById('tab-overview');
-            if (btn) btn.click();
-        } else if (trigger_id === 'btn-go-to-epidemiology' || trigger_id === 'btn-quick-forecast' || trigger_id === 'btn-quick-priority') {
-            const btn = document.getElementById('tab-epidemiology');
-            if (btn) btn.click();
-        } else if (trigger_id === 'btn-quick-timeline') {
-            const btn = document.getElementById('tab-mutations');
-            if (btn) btn.click();
-        }
-        return window.dash_clientside.no_update;
-    }
-    """,
-    Output("url", "id"),
-    Input("btn-back-to-overview-from-mutations", "n_clicks"),
-    Input("btn-back-to-overview-from-epi", "n_clicks"),
-    Input("btn-go-to-epidemiology", "n_clicks"),
-    Input("btn-quick-forecast", "n_clicks"),
-    Input("btn-quick-priority", "n_clicks"),
-    Input("btn-quick-timeline", "n_clicks"),
-    prevent_initial_call=True
-)
+
 
 def create_mutation_type_pie_chart(type_counts, virus):
     """Create a pie chart showing mutation type distribution"""
@@ -5465,6 +6260,7 @@ def update_mutation_frequency_chart(filtered_json, virus, mutation_type, categor
     )
     
     fig.update_traces(
+        marker_cornerradius=6,
         hovertemplate="<b>%{x}</b><br>Samples: %{y:.1f}%<br>Count: %{customdata}<extra></extra>",
         customdata=mutation_counts["count"]
     )
@@ -5479,93 +6275,6 @@ def update_mutation_frequency_chart(filtered_json, virus, mutation_type, categor
     
     return fig
 
-
-@callback(
-    Output("mutation-distribution-chart", "figure"),
-    Input("filtered-store", "data"),
-    Input("selected-virus", "data"),
-    Input("mutation-type-filter", "value"),
-)
-def update_mutation_distribution_chart(filtered_json, virus, mutation_type):
-    data = get_data_store()
-    selected_virus = virus or "HBV"
-    
-    # Get filtered data
-    filtered_df = _df_from_json(filtered_json)
-    
-    # Get mutation data
-    mutation_data = data["hbv_mut"] if selected_virus == "HBV" else data["hcv_mut"]
-    
-    if mutation_data.empty or filtered_df.empty:
-        return _empty_plot("No mutation data available")
-    
-    # Filter mutations to match current filtered sequences
-    if "ID" in mutation_data.columns and "ID" in filtered_df.columns:
-        filtered_mutations = mutation_data[mutation_data["ID"].isin(filtered_df["ID"].unique())]
-    else:
-        filtered_mutations = mutation_data
-    
-    # Apply type filter
-    if mutation_type != "all" and "type" in filtered_mutations.columns:
-        filtered_mutations = filtered_mutations[filtered_mutations["type"] == mutation_type]
-    
-    if filtered_mutations.empty:
-        return _empty_plot("No mutations in filtered data")
-    
-    # Group by type
-    if "type" in filtered_mutations.columns:
-        type_counts = filtered_mutations.groupby("type").size().reset_index(name="count")
-        
-        # Color mapping
-        color_map = {
-            "antiviral_resistance": "#e41a1c",
-            "vaccine_escape": "#377eb8", 
-            "substitution_of_interest": "#4daf4a",
-            "no_resistance": "#999999"
-        }
-        
-        # Create pie chart
-        fig = px.pie(
-            type_counts,
-            names="type",
-            values="count",
-            hole=0.4,
-            color="type",
-            color_discrete_map=color_map,
-            title=f"{selected_virus} Mutation Types Distribution"
-        )
-    else:
-        # Fallback: group by mutation
-        mutation_counts = filtered_mutations.groupby("mutation").size().reset_index(name="count")
-        mutation_counts = mutation_counts.sort_values("count", ascending=False).head(10)
-        
-        fig = px.pie(
-            mutation_counts,
-            names="mutation",
-            values="count",
-            hole=0.4,
-            title=f"{selected_virus} Top 10 Mutations"
-        )
-    
-    fig.update_traces(
-        textposition="inside",
-        textinfo="percent+label",
-        hovertemplate="<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>"
-    )
-    
-    fig.update_layout(
-        height=400,
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=-0.2,
-            xanchor="center",
-            x=0.5
-        )
-    )
-    
-    return fig
 
 
 @callback(
@@ -5617,23 +6326,44 @@ def update_mutation_details_table(filtered_json, virus, mutation_type, category)
     # Keep only existing columns
     columns_to_show = [col for col in columns_to_show if col in filtered_mutations.columns]
     
-    # Create DataTable
+    # Create DataTable with elevated design system styling
     table = dash.dash_table.DataTable(
         data=filtered_mutations[columns_to_show].to_dict('records'),
-        columns=[{"name": col.capitalize(), "id": col} for col in columns_to_show],
+        columns=[{"name": col.replace("_", " ").title(), "id": col} for col in columns_to_show],
         page_size=10,
-        style_table={'overflowX': 'auto'},
-        style_cell={
-            'textAlign': 'left',
-            'padding': '10px',
-            'overflow': 'hidden',
-            'textOverflow': 'ellipsis',
-            'maxWidth': 0,
-        },
-        style_header={
-            'backgroundColor': 'rgb(230, 230, 230)',
-            'fontWeight': 'bold'
-        },
+        style_table={'overflowX': 'auto', 'borderRadius': '10px'},
+        style_cell=TABLE_CELL_STYLE,
+        style_header=TABLE_HEADER_STYLE,
+        style_data_conditional=[
+            TABLE_ODD_ROW_STYLE,
+            {
+                "if": {
+                    "column_id": "type",
+                    "filter_query": '{type} eq "antiviral_resistance"'
+                },
+                "backgroundColor": "#FFE4E6",
+                "color": "#E11D48",
+                "fontWeight": "700",
+            },
+            {
+                "if": {
+                    "column_id": "type",
+                    "filter_query": '{type} eq "vaccine_escape"'
+                },
+                "backgroundColor": "#FEF3C7",
+                "color": "#D97706",
+                "fontWeight": "700",
+            },
+            {
+                "if": {
+                    "column_id": "type",
+                    "filter_query": '{type} eq "substitution_of_interest"'
+                },
+                "backgroundColor": "#DBEAFE",
+                "color": "#2563EB",
+                "fontWeight": "700",
+            },
+        ],
         filter_action="native",
         sort_action="native",
         export_format="csv"
@@ -6044,7 +6774,6 @@ def update_country_stacked_bar_callback(filtered_json, virus, regions, countries
 
 # Update priority ranking to be more responsive
 @callback(
-    Output("priority-ranking-table", "children"),
     Output("priority-data-store", "data"),
     Input("gap-store", "data"),
     Input("selected-virus", "data"),
@@ -6065,9 +6794,207 @@ def update_priority_ranking_responsive(gap_json, virus):
         gap_df, data["ihme_df"], virus or "HBV", weights
     )
     
-    return make_priority_table(priority_df), _df_to_json(priority_df)
+    return _df_to_json(priority_df)
     
-# === EPIDEMIOLOGY CALLBACKS ===
+# === EPIDEMIOLOGY OVER TIME & CARE CASCADE FIGURES ===
+
+def make_disease_burden_trend_plot(ihme_df, virus="HBV", metric="Prevalence", measure="Rate", geo="GLOBAL"):
+    if ihme_df is None or ihme_df.empty:
+        return _empty_plot("No IHME burden trend data available")
+
+    cause_map = {
+        "HBV": "Total burden related to hepatitis B",
+        "HCV": "Total burden related to hepatitis C",
+        "HEV": "Total burden related to hepatitis E",
+    }
+    cause = cause_map.get(virus, cause_map["HBV"])
+    df = ihme_df[
+        (ihme_df["cause"] == cause) &
+        (ihme_df["measure"] == metric) &
+        (ihme_df["metric"] == measure)
+    ].copy()
+
+    if geo != "GLOBAL" and "WHO_Regions" in df.columns:
+        df = df[df["WHO_Regions"] == geo]
+
+    if df.empty:
+        return _empty_plot(f"No burden data found for {virus} ({metric}, {measure}, {geo})")
+
+    df["year"] = pd.to_numeric(df["year"], errors="coerce")
+    df["val"] = pd.to_numeric(df["val"], errors="coerce")
+    df = df.dropna(subset=["year", "val"])
+
+    if measure == "Rate":
+        trend_df = df.groupby("year")["val"].mean().reset_index()
+    else:
+        trend_df = df.groupby("year")["val"].sum().reset_index()
+
+    trend_df = trend_df.sort_values("year")
+
+    if trend_df.empty:
+        return _empty_plot("No annual trend points available")
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=trend_df["year"],
+        y=trend_df["val"],
+        mode="lines+markers",
+        name=f"{metric} ({measure})",
+        line=dict(color="#0284c7", width=2.5),
+        marker=dict(size=6, color="#0284c7"),
+        hovertemplate="Year %{x}: <b>%{y:,.1f}</b><extra></extra>"
+    ))
+
+    # Add 2015 baseline horizontal dashed line
+    val_2015 = trend_df[trend_df["year"] == 2015]["val"].values
+    if len(val_2015) > 0:
+        y_2015 = val_2015[0]
+        max_x = int(trend_df["year"].max())
+        fig.add_shape(
+            type="line",
+            x0=1990, x1=max_x,
+            y0=y_2015, y1=y_2015,
+            line=dict(color="#f59e0b", width=1.5, dash="dash"),
+        )
+        fig.add_annotation(
+            x=max_x, y=y_2015,
+            text="2015 baseline",
+            showarrow=False,
+            font=dict(color="#d97706", size=11, weight="bold"),
+            xanchor="right", yanchor="bottom"
+        )
+
+    fig.update_layout(
+        xaxis=dict(
+            title="Year",
+            gridcolor="rgba(0,0,0,0.06)",
+            range=[1989, int(trend_df["year"].max()) + 1],
+            showline=True,
+            linecolor="rgba(0,0,0,0.2)"
+        ),
+        yaxis=dict(
+            title=f"{metric} ({measure})",
+            gridcolor="rgba(0,0,0,0.06)",
+            showline=True,
+            linecolor="rgba(0,0,0,0.2)"
+        ),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(t=20, b=40, l=60, r=30),
+        showlegend=False
+    )
+    return fig
+
+
+def make_cascade_bars_plot(who_gho_df, virus="HBV", regions=None, countries=None):
+    if who_gho_df is None or who_gho_df.empty:
+        return _empty_plot("No WHO GHO care cascade data available")
+
+    v = (virus or "HBV").lower()
+    df22 = who_gho_df[who_gho_df["year"] == 2022].copy()
+
+    if regions:
+        df22 = df22[df22["WHO_Regions"].isin(regions)]
+    if countries:
+        df22 = df22[df22["Country_standard"].isin(countries)]
+
+    living_col = f"{v}_livingwith_num"
+    diag_col = f"{v}_diagnosed_num"
+    treat_col = f"{v}_treatment_num" if v == "hbv" else f"{v}_treatment_cumulative_num"
+
+    living = df22[living_col].sum() if living_col in df22.columns else 0
+    diag = df22[diag_col].sum() if diag_col in df22.columns else 0
+    treat = df22[treat_col].sum() if treat_col in df22.columns else 0
+
+    living_pct = 100.0 if living > 0 else 0.0
+    diag_pct = (diag / living * 100.0) if living > 0 else 0.0
+    treat_pct = (treat / living * 100.0) if living > 0 else 0.0
+
+    def fmt_val(num):
+        if num >= 1_000_000:
+            return f"{num / 1_000_000:.1f}M"
+        if num >= 1_000:
+            return f"{num / 1_000:.1f}k"
+        return f"{int(num):,}"
+
+    categories = ["Treated", "Diagnosed", "Living with infection"]
+    pct_vals = [treat_pct, diag_pct, living_pct]
+    text_labels = [
+        f"  {fmt_val(treat)}  ({treat_pct:.1f}%)",
+        f"  {fmt_val(diag)}  ({diag_pct:.1f}%)",
+        f"  {fmt_val(living)}  ({living_pct:.1f}%)",
+    ]
+
+    fig = go.Figure(go.Bar(
+        x=pct_vals,
+        y=categories,
+        orientation="h",
+        marker=dict(
+            color=["#10b981", "#f59e0b", "#0284c7"],
+            line=dict(width=0)
+        ),
+        text=text_labels,
+        textposition="auto",
+        textfont=dict(color="white", size=12, weight="bold"),
+        hovertemplate="<b>%{y}</b><br>Percent of total: %{x:.1f}%<extra></extra>"
+    ))
+
+    fig.update_layout(
+        xaxis=dict(
+            title="Percentage of Living with Infection (%)",
+            range=[0, 118],
+            gridcolor="rgba(0,0,0,0.06)",
+            showline=True,
+            linecolor="rgba(0,0,0,0.2)"
+        ),
+        yaxis=dict(
+            title="",
+            tickfont=dict(size=12, color="#1e293b", weight="bold"),
+            showline=True,
+            linecolor="rgba(0,0,0,0.2)"
+        ),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(t=20, b=40, l=145, r=25),
+        showlegend=False
+    )
+    return fig
+
+
+@callback(
+    Output("epi-disease-burden-trend-graph", "figure"),
+    Input("selected-virus", "data"),
+    Input("epi-trend-metric", "value"),
+    Input("epi-trend-measure", "value"),
+    #Input("epi-trend-geo", "value"),
+)
+def update_epi_disease_burden_trend_graph(virus, metric, measure):
+    data = get_data_store()
+    ihme_df = data.get("ihme_df", pd.DataFrame())
+    return make_disease_burden_trend_plot(
+        ihme_df=ihme_df,
+        virus=virus or "HBV",
+        metric=metric or "Prevalence",
+        measure=measure or "Rate",
+        #geo=geo or "GLOBAL"
+    )
+
+
+@callback(
+    Output("epi-cascade-bars-graph", "figure"),
+    Input("selected-virus", "data"),
+    Input("continent-dropdown", "value"),
+    Input("country-dropdown", "value"),
+)
+def update_epi_cascade_bars_graph(virus, regions, countries):
+    data = get_data_store()
+    who_gho_df = data.get("who_gho_df", pd.DataFrame())
+    return make_cascade_bars_plot(
+        who_gho_df=who_gho_df,
+        virus=virus or "HBV",
+        regions=regions,
+        countries=countries
+    )
 
 
 def format_big_number(val):
@@ -6083,24 +7010,36 @@ def format_big_number(val):
 @callback(
     Output("epi-metric-dropdown", "options"),
     Output("epi-metric-dropdown", "value"),
+    Input("epi-map-category", "value"),
     Input("selected-virus", "data"),
     State("epi-metric-dropdown", "value"),
 )
-def update_epi_metric_dropdown_options(virus, current_val):
-    options = [
-        {"label": "People living with infection", "value": "livingwith_num"},
-        {"label": "New infections", "value": "new_infections_num"},
-        {"label": "Deaths", "value": "deaths_num"},
-        {"label": "Prevalence %", "value": "prevalence_pct"},
-        {"label": "Diagnosis rate %", "value": "diagnosis_rate_pct"},
-        {"label": "Treatment rate %", "value": "treatment_rate_diagnosed_pct"}
-    ]
+def update_epi_metric_dropdown_options(category, virus, current_val):
+    category = category or "burden"
+    virus = virus or "HBV"
     
-    if virus == "HBV":
-        options.append({"label": "HBV vaccine coverage % (HepB3)", "value": "vaccine_hepb3_coverage_pct"})
+    if category == "burden":
+        options = [
+            {"label": "People living with infection", "value": "livingwith_num"},
+            {"label": "New infections", "value": "new_infections_num"},
+            {"label": "Deaths", "value": "deaths_num"},
+            {"label": "Prevalence %", "value": "prevalence_pct"},
+            {"label": "Incidence rate", "value": "incidence_rate"},
+            {"label": "Mortality rate", "value": "mortality_rate"},
+        ]
+    else: # "response"
+        options = [
+            {"label": "Diagnosis rate %", "value": "diagnosis_rate_pct"},
+            {"label": "Treatment rate %", "value": "treatment_rate_diagnosed_pct"},
+        ]
+        if virus == "HBV":
+            options.append({"label": "HBV vaccine coverage % (HepB3)", "value": "vaccine_hepb3_coverage_pct"})
+        elif virus == "HCV":
+            options.append({"label": "DAA treatment / cure coverage %", "value": "daa_treatment_coverage_pct"})
         
     valid_vals = [opt["value"] for opt in options]
-    val = current_val if current_val in valid_vals else "prevalence_pct"
+    default_val = options[0]["value"] if options else "livingwith_num"
+    val = current_val if current_val in valid_vals else default_val
     
     return options, val
 
@@ -6192,84 +7131,123 @@ def update_gho_burden_map(virus, metric, regions, countries):
         return _empty_plot("Select a metric to view the map")
         
     data = get_data_store()
+    ihme_df = data.get("ihme_df", pd.DataFrame())
     who_gho_df = data.get("who_gho_df", pd.DataFrame())
     
-    if who_gho_df.empty:
-        return _empty_plot("No WHO GHO data available")
-        
-    prefix = virus.lower() + "_"
-    col_name = prefix + metric
-    
-    if col_name not in who_gho_df.columns:
-        return _empty_plot(f"Metric '{metric}' not found for virus {virus}")
-        
-    if metric == "vaccine_hepb3_coverage_pct":
-        non_null_years = who_gho_df[who_gho_df[col_name].notna()]["year"]
-        map_year = int(non_null_years.max()) if not non_null_years.empty else 2022
-    else:
-        map_year = 2022
-        
-    df = who_gho_df[who_gho_df["year"] == map_year]
-    
-    if regions:
-        df = df[df["WHO_Regions"].isin(regions)]
-    if countries:
-        df = df[df["Country_standard"].isin(countries)]
-        
-    if df.empty or df[col_name].isna().all():
-        return _empty_plot(f"No data available for year {map_year} with current filters")
-        
     metric_labels = {
         "livingwith_num": "People living with infection",
         "new_infections_num": "New infections",
         "deaths_num": "Deaths",
         "prevalence_pct": "Prevalence %",
+        "incidence_rate": "Incidence rate (per 100k)",
+        "mortality_rate": "Mortality rate (per 100k)",
         "diagnosis_rate_pct": "Diagnosis rate %",
         "treatment_rate_diagnosed_pct": "Treatment rate %",
-        "vaccine_hepb3_coverage_pct": "HBV vaccine coverage % (HepB3)"
+        "vaccine_hepb3_coverage_pct": "HBV vaccine coverage % (HepB3)",
+        "daa_treatment_coverage_pct": "DAA treatment / cure coverage %"
     }
     metric_label = metric_labels.get(metric, metric)
     
-    color_scale = "YlOrBr"
-    
+    # Handle IHME rates (incidence_rate, mortality_rate)
+    if metric in ["incidence_rate", "mortality_rate"]:
+        if ihme_df.empty:
+            return _empty_plot("No IHME data available")
+            
+        cause_map = {
+            "HBV": "Total burden related to hepatitis B",
+            "HCV": "Total burden related to hepatitis C",
+            "HEV": "Total burden related to hepatitis E"
+        }
+        m_name = "Incidence" if metric == "incidence_rate" else "Deaths"
+        df_ihme = ihme_df[
+            (ihme_df["cause"] == cause_map.get(virus, cause_map["HBV"])) &
+            (ihme_df["measure"] == m_name) &
+            (ihme_df["metric"] == "Rate") &
+            (ihme_df["year"] == 2021)
+        ].copy()
+        
+        if regions and "WHO_Regions" in df_ihme.columns:
+            df_ihme = df_ihme[df_ihme["WHO_Regions"].isin(regions)]
+        if countries and "Country_standard" in df_ihme.columns:
+            df_ihme = df_ihme[df_ihme["Country_standard"].isin(countries)]
+            
+        if df_ihme.empty:
+            return _empty_plot("No data available for current IHME filters")
+            
+        df_ihme["val_mean"] = df_ihme.groupby("Country_standard")["val"].transform("mean")
+        df_plot = df_ihme.drop_duplicates(subset=["Country_standard"]).copy()
+        
+        locations = df_plot["Country_standard"]
+        z_vals = df_plot["val_mean"]
+        color_scale = "YlOrRd"
+        
+    else: # WHO GHO metrics
+        if who_gho_df.empty:
+            return _empty_plot("No WHO GHO data available")
+            
+        prefix = virus.lower() + "_"
+        col_name = prefix + metric
+        
+        if metric == "daa_treatment_coverage_pct":
+            col_name = prefix + "treatment_rate_diagnosed_pct"
+            
+        if col_name not in who_gho_df.columns:
+            return _empty_plot(f"Metric '{metric}' not found for virus {virus}")
+            
+        map_year = 2022
+        if metric == "vaccine_hepb3_coverage_pct":
+            non_null_years = who_gho_df[who_gho_df[col_name].notna()]["year"]
+            map_year = int(non_null_years.max()) if not non_null_years.empty else 2022
+            
+        df = who_gho_df[who_gho_df["year"] == map_year].copy()
+        
+        if regions:
+            df = df[df["WHO_Regions"].isin(regions)]
+        if countries:
+            df = df[df["Country_standard"].isin(countries)]
+            
+        if df.empty or df[col_name].isna().all():
+            return _empty_plot(f"No data available for year {map_year} with current filters")
+            
+        locations = df["Country_standard"]
+        z_vals = df[col_name]
+        
+    is_pct = ("pct" in metric or "rate" in metric)
+    bins, step_colors, tick_labels = _bin_continuous_series(z_vals, is_pct=is_pct)
+        
     fig = go.Figure(data=go.Choropleth(
-        locations=df["country"],
-        z=df[col_name],
-        text=df["Country_standard"],
-        locationmode="ISO-3",
-        colorscale=color_scale,
-        autocolorscale=False,
-        reversescale=False,
-        marker_line_color="rgba(255,255,255,0.15)",
+        locations=locations,
+        locationmode="country names",
+        z=bins,
+        colorscale=_stepped_colorscale(step_colors) if step_colors else "YlOrRd",
+        showscale=False,
+        marker_line_color="rgba(0,0,0,0.3)",
         marker_line_width=0.5,
-        colorbar_title=metric_label,
-        colorbar_ticksuffix="%" if "pct" in metric or "rate" in metric else "",
-        hovertemplate="<b>%{text}</b><br>" + metric_label + ": %{z:,.2f}<extra></extra>"
+        hovertemplate="<b>%{location}</b><br>" + metric_label + ": <b>%{customdata:,.2f}</b><extra></extra>",
+        customdata=z_vals,
     ))
     
+    if step_colors and tick_labels:
+        _add_single_box_legend(fig, step_colors, tick_labels)
+    
+    fig.update_geos(
+        projection_type="equirectangular",
+        showcountries=True,
+        countrycolor="rgba(0,0,0,0.2)",
+        showsubunits=True,
+        fitbounds=False,
+        showframe=False,
+        lataxis_range=[-65, 85],
+        domain=dict(x=[0, 1], y=[0, 1]),
+    )
     fig.update_layout(
-        title=dict(
-            text=f"Global {metric_label} ({map_year})",
-            font=dict(size=16, color="#ECEFF2"),
-            x=0.05, y=0.95
-        ),
-        geo=dict(
-            showframe=False,
-            showcoastlines=True,
-            projection_type='natural earth',
-            landcolor='#101E2B',
-            oceancolor='#07111A',
-            showocean=True,
-            showland=True,
-            coastlinecolor="rgba(255,255,255,0.08)",
-            countrycolor="rgba(255,255,255,0.06)",
-        ),
-        margin=dict(l=0, r=0, t=50, b=0),
-        height=450,
+        height=330,
+        margin=dict(t=0, b=0, l=0, r=0),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(visible=False, showgrid=False, zeroline=False),
+        yaxis=dict(visible=False, showgrid=False, zeroline=False),
     )
-    
     return fig
 
 
@@ -6437,8 +7415,6 @@ def make_epi_priority_table(virus, regions, countries):
         "burden",
         diag_col,
         treat_col,
-        "coverage_gap",
-        "priority_score"
     ]
     
     available_cols = [c for c in columns_needed if c in display_df.columns]
@@ -6450,16 +7426,11 @@ def make_epi_priority_table(virus, regions, countries):
         "burden": "Living with infection",
         diag_col: "Diagnosed %",
         treat_col: "Treatment %",
-        "coverage_gap": "Estimated gap",
-        "priority_score": "Priority score"
     }
     display_df = display_df.rename(columns=rename_map)
     
     # Format columns
-    if "Priority score" in display_df.columns:
-        display_df["Priority score"] = pd.to_numeric(display_df["Priority score"], errors="coerce").round(3)
-        
-    for col in ["Living with infection", "Estimated gap"]:
+    for col in ["Living with infection"]:
         if col in display_df.columns:
             display_df[col] = pd.to_numeric(display_df[col], errors="coerce").apply(
                 lambda x: f"{x:,.0f}" if pd.notna(x) else "N/A"
@@ -6474,17 +7445,50 @@ def make_epi_priority_table(virus, regions, countries):
     # Render table
     from hep_theme import TABLE_HEADER_STYLE, TABLE_CELL_STYLE, TABLE_ODD_ROW_STYLE
     
+    compact_cell_style = TABLE_CELL_STYLE.copy()
+    compact_cell_style.update({"padding": "8px 8px", "fontSize": "12px", "maxWidth": None})
+    
+    compact_header_style = TABLE_HEADER_STYLE.copy()
+    compact_header_style.update({"padding": "8px 8px", "fontSize": "11px"})
+
     return dash_table.DataTable(
         data=display_df.to_dict("records"),
         columns=[{"name": col, "id": col} for col in display_df.columns],
         page_size=6,
         sort_action="native",
         style_table={
-            "overflowX": "auto",
+            "overflowX": "hidden",
             "backgroundColor": "transparent",
+            "width": "100%",
+            "minWidth": "100%",
         },
-        style_header=TABLE_HEADER_STYLE,
-        style_cell=TABLE_CELL_STYLE,
+        style_header=compact_header_style,
+        style_cell=compact_cell_style,
+        style_cell_conditional=[
+            {
+                "if": {"column_id": "Rank"},
+                "width": "40px",
+                "textAlign": "center",
+            },
+            {
+                "if": {"column_id": "Country"},
+                "width": "35%",
+                "whiteSpace": "normal",
+                "fontWeight": "600",
+            },
+            {
+                "if": {"column_id": "Living with infection"},
+                "width": "27%",
+            },
+            {
+                "if": {"column_id": "Diagnosed %"},
+                "width": "19%",
+            },
+            {
+                "if": {"column_id": "Treatment %"},
+                "width": "19%",
+            },
+        ],
         style_data_conditional=[TABLE_ODD_ROW_STYLE],
     )
 
@@ -6563,35 +7567,40 @@ def make_hbv_epi_scatter_plot(regions, countries, y_metric):
             )
             
     fig.update_layout(
-        title=dict(
-            text="HBV Vaccine Coverage vs Disease Burden (2022)",
-            font=dict(color="white", size=14)
-        ),
+        title=None,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="rgba(255,255,255,0.7)"),
+        font=dict(family="IBM Plex Sans, sans-serif", color="#475569", size=11),
         xaxis=dict(
-            gridcolor="rgba(255,255,255,0.08)",
-            linecolor="rgba(255,255,255,0.25)",
+            gridcolor="rgba(15, 23, 42, 0.08)",
+            linecolor="rgba(15, 23, 42, 0.2)",
             showgrid=True,
             zeroline=False,
+            title=dict(font=dict(color="#0f172a", size=11, weight="bold")),
+            tickfont=dict(color="#475569", size=10),
         ),
         yaxis=dict(
-            gridcolor="rgba(255,255,255,0.08)",
-            linecolor="rgba(255,255,255,0.25)",
+            gridcolor="rgba(15, 23, 42, 0.08)",
+            linecolor="rgba(15, 23, 42, 0.2)",
             showgrid=True,
             zeroline=False,
+            title=dict(font=dict(color="#0f172a", size=11, weight="bold")),
+            tickfont=dict(color="#475569", size=10),
         ),
-        height=380,
-        margin=dict(l=40, r=40, t=40, b=40),
+        height=360,
+        margin=dict(l=55, r=25, t=15, b=45),
         hovermode="closest",
         showlegend=True,
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=1.02,
+            yanchor="top",
+            y=0.98,
             xanchor="right",
-            x=1
+            x=0.98,
+            bgcolor="rgba(255, 255, 255, 0.85)",
+            bordercolor="rgba(15, 23, 42, 0.12)",
+            borderwidth=1,
+            font=dict(color="#1e293b", size=10)
         )
     )
     return fig
@@ -6676,35 +7685,40 @@ def make_hcv_epi_scatter_plot(regions, countries, x_metric, y_metric):
             )
             
     fig.update_layout(
-        title=dict(
-            text="HCV Diagnosis/Treatment Access vs Disease Burden (2022)",
-            font=dict(color="white", size=14)
-        ),
+        title=None,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="rgba(255,255,255,0.7)"),
+        font=dict(family="IBM Plex Sans, sans-serif", color="#475569", size=11),
         xaxis=dict(
-            gridcolor="rgba(255,255,255,0.08)",
-            linecolor="rgba(255,255,255,0.25)",
+            gridcolor="rgba(15, 23, 42, 0.08)",
+            linecolor="rgba(15, 23, 42, 0.2)",
             showgrid=True,
             zeroline=False,
+            title=dict(font=dict(color="#0f172a", size=11, weight="bold")),
+            tickfont=dict(color="#475569", size=10),
         ),
         yaxis=dict(
-            gridcolor="rgba(255,255,255,0.08)",
-            linecolor="rgba(255,255,255,0.25)",
+            gridcolor="rgba(15, 23, 42, 0.08)",
+            linecolor="rgba(15, 23, 42, 0.2)",
             showgrid=True,
             zeroline=False,
+            title=dict(font=dict(color="#0f172a", size=11, weight="bold")),
+            tickfont=dict(color="#475569", size=10),
         ),
-        height=380,
-        margin=dict(l=40, r=40, t=40, b=40),
+        height=360,
+        margin=dict(l=55, r=25, t=15, b=45),
         hovermode="closest",
         showlegend=True,
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=1.02,
+            yanchor="top",
+            y=0.98,
             xanchor="right",
-            x=1
+            x=0.98,
+            bgcolor="rgba(255, 255, 255, 0.85)",
+            bordercolor="rgba(15, 23, 42, 0.12)",
+            borderwidth=1,
+            font=dict(color="#1e293b", size=10)
         )
     )
     return fig
@@ -6738,20 +7752,82 @@ def update_hcv_epi_row(regions, countries, x_metric, y_metric):
 
 
 @callback(
+    Output("hbv-epi-trends-controls", "style"),
+    Output("hcv-epi-trends-controls", "style"),
     Output("hbv-epi-trends-row", "style"),
     Output("hcv-epi-trends-row", "style"),
+    Output("hbv-epi-priority-table", "style"),
+    Output("hcv-epi-priority-table", "style"),
     Input("selected-virus", "data"),
 )
 def toggle_epi_trends_rows(virus):
     if virus == "HBV":
-        return {"display": "flex"}, {"display": "none"}
+        return (
+            {"display": "flex", "alignItems": "center"},
+            {"display": "none"},
+            {"display": "block"},
+            {"display": "none"},
+            {"display": "block"},
+            {"display": "none"}
+        )
     elif virus == "HCV":
-        return {"display": "none"}, {"display": "flex"}
+        return (
+            {"display": "none"},
+            {"display": "flex", "alignItems": "center"},
+            {"display": "none"},
+            {"display": "block"},
+            {"display": "none"},
+            {"display": "block"}
+        )
     else:
-        return {"display": "none"}, {"display": "none"}
+        return (
+            {"display": "none"},
+            {"display": "none"},
+            {"display": "none"},
+            {"display": "none"},
+            {"display": "none"},
+            {"display": "none"}
+        )
 
 
 
+
+
+@callback(
+    Output("epi-coverage-map-graph", "figure"),
+    Input("selected-virus", "data"),
+    Input("continent-dropdown", "value"),
+    Input("country-dropdown", "value"),
+    Input("filtered-store", "data"),
+)
+def update_epi_coverage_map(virus, regions, countries, filtered_json):
+    data = get_data_store()
+    v = virus or "HBV"
+    df = _df_from_json(filtered_json)
+    
+    if df.empty or "Country_standard" not in df.columns:
+        df = data.get("hbv_data" if v == "HBV" else "hcv_data", pd.DataFrame())
+        
+    if regions and "WHO_Regions" in df.columns:
+        df = df[df["WHO_Regions"].isin(regions)]
+    if countries and "Country_standard" in df.columns:
+        df = df[df["Country_standard"].isin(countries)]
+        
+    if df.empty or "Country_standard" not in df.columns:
+        return _empty_world("No sequence data available for selected filters")
+        
+    ctry_counts = df.groupby("Country_standard").size().reset_index(name="Metric_raw")
+    geno_counts = df.groupby(["Country_standard", "genotype"]).size().reset_index(name="Count") if "genotype" in df.columns else pd.DataFrame()
+    
+    return create_world_map(
+        country_data=ctry_counts,
+        country_genotype_counts=geno_counts,
+        coord_lookup=data["coord_lookup"],
+        virus_type=v,
+        display_mode="raw",
+        map_title="Sequence Count Map",
+        height=330
+    )
 
 
 @callback(
@@ -6850,12 +7926,13 @@ def download_priority_table(n_clicks, priority_json, virus):
 @callback(
     Output("year-range-slider", "min"),
     Output("year-range-slider", "max"),
-    Output("year-range-slider", "value"),
+    Output("year-range-slider", "value", allow_duplicate=True),
     Output("year-range-slider", "marks"),
     Output('continent-dropdown', 'options'),
     Output('country-dropdown', 'options'),
     Output('genotype-dropdown', 'options'),
     Input("selected-virus", "data"),
+    prevent_initial_call=True
 )
 def init_controls(virus):
     data = get_data_store()
@@ -6888,16 +7965,6 @@ def init_controls(virus):
     country_opts = [{"label": c, "value": c} for c in sorted(base["Country_standard"].dropna().unique()) if c!="Unknown"]
     geno_opts = [{"label": g, "value": g} for g in sorted(base["genotype"].dropna().unique())]
     return y0, y1, [y0, y1], marks, cont_opts, country_opts, geno_opts
-
-
-@callback(
-    Output("year-range-label", "children"),
-    Input("year-range-slider", "value")
-)
-def update_year_range_label(year_range):
-    if not year_range or len(year_range) != 2:
-        return ""
-    return f"{year_range[0]} – {year_range[1]}"
 
 
 @callback(
@@ -7264,37 +8331,6 @@ def download_main_data_simple(n_clicks, filtered_json, virus):
     
 
 
-# === SMALL UI TOGGLES ==============================================================
-@callback(
-    Output("selected-virus", "data"),
-    Output("btn-hbv", "className"),
-    Output("btn-hcv", "className"),
-    Output("btn-hev", "className"),
-    Input("btn-hbv", "n_clicks"),
-    Input("btn-hcv", "n_clicks"),
-    Input("btn-hev", "n_clicks"),
-    prevent_initial_call=True
-)
-def update_virus(btn_hbv_clicks, btn_hcv_clicks, btn_hev_clicks):
-    ctx = callback_context
-    base = "hep-virus-item"
-    active = "hep-virus-item hep-virus-active"
-
-    if not ctx.triggered:
-        return "HBV", active, base, base
-    
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
-    if triggered_id == "btn-hbv":
-        return "HBV", active, base, base
-    elif triggered_id == "btn-hcv":
-        return "HCV", base, active, base
-    elif triggered_id == "btn-hev":
-        return "HEV", base, base, active
-    
-    return "HBV", active, base, base 
-
-
 # === DYNAMIC ACCENT SWITCHING ===
 @callback(
     Output("hep-dashboard-shell-container", "style"),
@@ -7367,4 +8403,1086 @@ def update_mutation_filter_options(virus):
     opts = sorted(pd.Series(mut[col]).dropna().astype(str).unique())
     return [{"label": v, "value": v} for v in opts]
 
+
+# === VIRUS DROPDOWN & RESET FILTER CALLBACKS ===
+@callback(
+    Output("selected-virus", "data", allow_duplicate=True),
+    Input("virus-dropdown", "value"),
+    prevent_initial_call=True
+)
+def sync_virus_dropdown_to_store(virus_val):
+    return virus_val or "HBV"
+
+
+@callback(
+    Output("virus-dropdown", "value", allow_duplicate=True),
+    Input("selected-virus", "data"),
+    prevent_initial_call=True
+)
+def sync_store_to_virus_dropdown(virus_data):
+    return virus_data or "HBV"
+
+
+@callback(
+    Output("virus-dropdown", "value", allow_duplicate=True),
+    Output("year-range-slider", "value", allow_duplicate=True),
+    Output("year-start-input", "value", allow_duplicate=True),
+    Output("year-end-input", "value", allow_duplicate=True),
+    Output("continent-dropdown", "value", allow_duplicate=True),
+    Output("country-dropdown", "value", allow_duplicate=True),
+    Output("genotype-dropdown", "value", allow_duplicate=True),
+    Input("btn-reset-filters", "n_clicks"),
+    prevent_initial_call=True
+)
+def reset_all_filters(n_clicks):
+    if n_clicks:
+        return "HBV", [1963, 2024], 1963, 2024, None, None, None
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+
+# === YEAR SLIDER <-> MANUAL YEAR INPUTS SYNC ===
+@callback(
+    Output("year-start-input", "value"),
+    Output("year-end-input", "value"),
+    Input("year-range-slider", "value"),
+    prevent_initial_call=False,
+)
+def sync_slider_to_year_inputs(range_val):
+    if not range_val or len(range_val) != 2:
+        return dash.no_update, dash.no_update
+    return range_val[0], range_val[1]
+
+
+@callback(
+    Output("year-range-slider", "value", allow_duplicate=True),
+    Input("year-start-input", "value"),
+    Input("year-end-input", "value"),
+    State("year-range-slider", "min"),
+    State("year-range-slider", "max"),
+    State("year-range-slider", "value"),
+    prevent_initial_call=True,
+)
+def sync_year_inputs_to_slider(start_val, end_val, slider_min, slider_max, current_range):
+    if start_val is None or end_val is None:
+        return dash.no_update
+    slider_min = slider_min if slider_min is not None else 1963
+    slider_max = slider_max if slider_max is not None else 2024
+    
+    try:
+        s = max(slider_min, min(int(start_val), slider_max))
+        e = min(slider_max, max(int(end_val), slider_min))
+        if s > e:
+            s, e = e, s
+        new_range = [s, e]
+        if current_range and current_range == new_range:
+            return dash.no_update
+        return new_range
+    except (ValueError, TypeError):
+        return dash.no_update
+
+
+# === REGION GENOTYPE HORIZONTAL BAR CHART CALLBACK ===
+@callback(
+    Output("region-genotype-bar-chart", "figure"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data")
+)
+def update_region_genotype_bar_chart(filtered_json, selected_virus):
+    if not filtered_json:
+        fig = go.Figure()
+        fig.update_layout(
+            annotations=[dict(text="No region data available", showarrow=False, font=dict(size=13, color="#64748B"))],
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)"
+        )
+        return fig
+
+    try:
+        df = _df_from_json(filtered_json)
+    except Exception:
+        df = pd.DataFrame()
+
+    if df.empty or "WHO_Regions" not in df.columns or "genotype" not in df.columns:
+        fig = go.Figure()
+        fig.update_layout(
+            annotations=[dict(text="No region data", showarrow=False, font=dict(size=13, color="#64748B"))],
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)"
+        )
+        return fig
+
+    df_clean = df[df["WHO_Regions"].notna() & (df["WHO_Regions"] != "Unknown")].copy()
+    if df_clean.empty:
+        df_clean = df[df["WHO_Regions"].notna()].copy()
+
+    if df_clean.empty:
+        fig = go.Figure()
+        fig.update_layout(
+            annotations=[dict(text="No region data available", showarrow=False, font=dict(size=13, color="#64748B"))],
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)"
+        )
+        return fig
+
+    region_abbrev = {
+        "Eastern Mediterranean": "Mediterranean",
+        "Western Pacific": "Western Pacific",
+        "South-East Asia": "South-East Asia",
+        "European": "Europe",
+        "African": "Africa",
+        "Americas": "Americas"
+    }
+    df_clean["WHO_Regions_Short"] = df_clean["WHO_Regions"].map(lambda x: region_abbrev.get(str(x), str(x)))
+    grouped = df_clean.groupby(["WHO_Regions_Short", "genotype"]).size().reset_index(name="count")
+    region_totals = df_clean.groupby("WHO_Regions_Short").size().sort_values(ascending=True)
+
+    virus_str = (selected_virus or "HBV").upper()
+    if virus_str == "HCV":
+        color_map = HCV_GENOTYPE_COLORS
+    elif virus_str == "HEV":
+        color_map = HEV_GENOTYPE_COLORS
+    else:
+        color_map = HBV_GENOTYPE_COLORS
+
+    fig = px.bar(
+        grouped,
+        y="WHO_Regions_Short",
+        x="count",
+        color="genotype",
+        orientation="h",
+        category_orders={"WHO_Regions_Short": region_totals.index.tolist()},
+        labels={"WHO_Regions_Short": "Region", "count": "Sequences", "genotype": "Genotype"},
+        color_discrete_map=color_map
+    )
+
+    fig.update_layout(
+        barmode="stack",
+        margin=dict(l=85, r=20, t=55, b=75),
+        height=420,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=10,
+            xanchor="left",
+            x=0,
+            title=dict(text=""),
+            font=dict(size=9, color="#475569")
+        ),
+        xaxis=dict(
+            title=dict(text="Sequences", font=dict(size=11, color="#475569")),
+            showgrid=True,
+            gridcolor="#E2E8F0",
+            tickfont=dict(color="#475569", size=11),
+            tickangle=0
+        ),
+        yaxis=dict(
+            title="",
+            showgrid=False,
+            tickfont=dict(color="#0F172A", size=11)
+        )
+    )
+
+    return fig
+
+
+# === HOMEPAGE EXECUTIVE SUMMARY CALLBACKS ===
+
+@callback(
+    Output("homepage-mutation-pie-graph", "figure"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data"),
+)
+def update_homepage_mutation_pie_callback(filtered_json, selected_virus):
+    df = _df_from_json(filtered_json)
+    selected_virus = selected_virus or "HBV"
+    if df is None or df.empty:
+        return _empty_pie_chart("No sequence data")
+
+    data = get_data_store()
+    if selected_virus == "HBV":
+        mut_df = data.get("hbv_mut", pd.DataFrame())
+    elif selected_virus == "HCV":
+        mut_df = data.get("hcv_mut", pd.DataFrame())
+    elif selected_virus == "HEV":
+        mut_df = data.get("hev_mut", pd.DataFrame())
+    else:
+        mut_df = pd.DataFrame()
+
+    if mut_df.empty or "ID" not in mut_df.columns or "type" not in mut_df.columns:
+        return _empty_pie_chart("No mutation markers")
+
+    filtered_ids = set(df["ID"].dropna().unique()) if "ID" in df.columns else set()
+    filtered_mut = mut_df[mut_df["ID"].isin(filtered_ids)] if filtered_ids else mut_df
+
+    if filtered_mut.empty:
+        return _empty_pie_chart("No mutations found")
+
+    type_counts = filtered_mut.groupby("type")["ID"].nunique().to_dict()
+    fig = create_mutation_type_pie_chart(type_counts, selected_virus)
+    fig.update_layout(height=320, showlegend=True, margin=dict(t=20, b=20, l=10, r=10))
+    return fig
+
+
+@callback(
+    Output("homepage-forecast-summary-graph", "figure"),
+    Output("epi-forecast-summary-graph", "figure"),
+    Input("selected-virus", "data"),
+    Input("continent-dropdown", "value"),
+    Input("country-dropdown", "value"),
+)
+def update_homepage_forecast_callback(virus, regions, countries):
+    data = get_data_store()
+    ihme_df = data.get("ihme_df", pd.DataFrame())
+    if ihme_df.empty:
+        empty_fig = _empty_plot("No historical GBD data available")
+        return empty_fig, empty_fig
+
+    fig = create_forecast_chart(
+        ihme_df=ihme_df,
+        selected_virus=virus or "HBV",
+        sex="Both",
+        selected_regions=regions,
+        selected_countries=countries
+    )
+    fig.update_layout(
+        height=320,
+        margin=dict(t=20, b=20, l=20, r=20),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#1e293b"),
+    )
+    return fig, fig
+
+
+@callback(
+    Output("homepage-priority-table-summary", "children"),
+    Input("priority-data-store", "data")
+)
+def update_homepage_priority_table_callback(priority_json):
+    priority_df = _df_from_json(priority_json)
+    if priority_df is None or priority_df.empty:
+        return html.Div("No priority data available", className="text-muted p-3 text-center")
+
+    display_df = priority_df.copy()
+    columns_needed = ["rank", "Country_standard", "priority_score", "burden", "coverage_gap", "observed_sequences"]
+    available_cols = [c for c in columns_needed if c in display_df.columns]
+    display_df = display_df[available_cols].head(5).copy()
+
+    rename_map = {
+        "rank": "Rank",
+        "Country_standard": "Country",
+        "priority_score": "Priority Score",
+        "burden": "Burden",
+        "coverage_gap": "Coverage Gap",
+        "observed_sequences": "Sequences",
+    }
+    display_df = display_df.rename(columns=rename_map)
+
+    if "Priority Score" in display_df.columns:
+        display_df["Priority Score"] = pd.to_numeric(display_df["Priority Score"], errors="coerce").round(2)
+    for col in ["Burden", "Coverage Gap", "Sequences"]:
+        if col in display_df.columns:
+            display_df[col] = pd.to_numeric(display_df[col], errors="coerce").apply(
+                lambda x: f"{x:,.0f}" if pd.notna(x) else "N/A"
+            )
+
+    return dash_table.DataTable(
+        data=display_df.to_dict("records"),
+        columns=[{"name": col, "id": col} for col in display_df.columns],
+        style_table={"overflowX": "auto"},
+        style_cell={
+            "fontFamily": "IBM Plex Sans, sans-serif",
+            "fontSize": "12px",
+            "padding": "8px 10px",
+            "textAlign": "left",
+        },
+        style_header={
+            "backgroundColor": "#f8fafc",
+            "fontWeight": "700",
+            "color": "#334155",
+            "borderBottom": "2px solid #e2e8f0",
+        },
+    )
+
+
+# =============================================================================
+# GENOTYPES TAB CALLBACKS
+# =============================================================================
+@callback(
+    Output("geno-kpi-observed", "children"),
+    Output("geno-kpi-dominant", "children"),
+    Output("geno-kpi-diversity", "children"),
+    Output("geno-kpi-shift", "children"),
+    Output("geno-map-genotype-filter", "options"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data"),
+)
+def update_genotype_kpi_summary(filtered_json, virus):
+    df = _df_from_json(filtered_json)
+    selected_virus = virus or "HBV"
+    
+    if df.empty or "genotype" not in df.columns:
+        opts = [{"label": "All Genotypes", "value": "ALL"}]
+        return "--", "--", "--", "--", opts
+    
+    df_valid = df[df["genotype"].notna() & (df["genotype"] != "Unknown")].copy()
+    if df_valid.empty:
+        opts = [{"label": "All Genotypes", "value": "ALL"}]
+        return "--", "--", "--", "--", opts
         
+    # 1. Observed Count
+    observed_gts = sorted(df_valid["genotype"].astype(str).unique())
+    observed_count = len(observed_gts)
+    opts = [{"label": "All Genotypes", "value": "ALL"}] + [{"label": f"Genotype {g}", "value": g} for g in observed_gts]
+    
+    # 2. Dominant Genotype
+    gt_counts = df_valid["genotype"].value_counts()
+    if not gt_counts.empty:
+        dom_gt = gt_counts.index[0]
+        dom_pct = (gt_counts.iloc[0] / len(df_valid)) * 100
+        dom_display = f"{dom_gt} ({dom_pct:.1f}%)"
+    else:
+        dom_display = "N/A"
+        
+    # 3. Most Diverse Region (Shannon Index)
+    def calc_shannon(series):
+        counts = series.value_counts()
+        props = counts / counts.sum()
+        return -np.sum(props * np.log(props + 1e-12))
+        
+    if "WHO_Regions" in df_valid.columns:
+        region_div = df_valid.groupby("WHO_Regions")["genotype"].apply(calc_shannon)
+        if not region_div.empty:
+            top_reg = region_div.idxmax()
+            top_shannon = region_div.max()
+            diversity_display = f"{top_reg} ({top_shannon:.2f})"
+        else:
+            diversity_display = "N/A"
+    else:
+        diversity_display = "N/A"
+        
+    # 4. Recent Shift (>= 2020 vs < 2020)
+    if "Year" in df_valid.columns:
+        df_valid["Year_num"] = pd.to_numeric(df_valid["Year"], errors="coerce")
+        hist = df_valid[df_valid["Year_num"] < 2020]["genotype"].value_counts(normalize=True)
+        rec = df_valid[df_valid["Year_num"] >= 2020]["genotype"].value_counts(normalize=True)
+        
+        diffs = (rec - hist).dropna()
+        if not diffs.empty:
+            max_shift_gt = diffs.idxmax()
+            shift_val = diffs.max() * 100
+            shift_display = f"{max_shift_gt} ↑ {shift_val:+.1f}%"
+        else:
+            shift_display = "Stable"
+    else:
+        shift_display = "N/A"
+        
+    return f"{observed_count}", dom_display, diversity_display, shift_display, opts
+
+
+@callback(
+    Output("geno-distribution-map-graph", "figure"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data"),
+    Input("geno-map-mode", "value"),
+    Input("geno-map-genotype-filter", "value"),
+)
+def update_geno_distribution_map(filtered_json, virus, map_mode, selected_gt):
+    df = _df_from_json(filtered_json)
+    if df.empty or "Country_standard" not in df.columns or "genotype" not in df.columns:
+        return _empty_world("No genotype geographic data available")
+        
+    df_valid = df[df["genotype"].notna() & (df["genotype"] != "Unknown") & df["Country_standard"].notna()].copy()
+    if df_valid.empty:
+        return _empty_world("No genotype geographic data available")
+        
+    fig = go.Figure()
+    
+    if map_mode == "dominant":
+        # Group by country, find most frequent genotype
+        ctry_dom = df_valid.groupby("Country_standard")["genotype"].agg(lambda s: s.value_counts().index[0]).reset_index()
+        unique_gts = sorted(ctry_dom["genotype"].unique())
+        
+        # Color scale index
+        gt_to_idx = {g: i for i, g in enumerate(unique_gts)}
+        ctry_dom["z_value"] = ctry_dom["genotype"].map(gt_to_idx)
+        
+        colors = _distinct_hue_colors(max(len(unique_gts), 1))
+        custom_scale = []
+        n_colors = len(unique_gts)
+        for i, col in enumerate(colors):
+            low = i / max(1, n_colors)
+            high = (i + 1) / max(1, n_colors)
+            custom_scale.append([low, col])
+            custom_scale.append([high, col])
+            
+        fig.add_trace(go.Choropleth(
+            locations=ctry_dom["Country_standard"],
+            locationmode="country names",
+            z=ctry_dom["z_value"],
+            colorscale=custom_scale if len(unique_gts) > 1 else [[0, colors[0]], [1, colors[0]]],
+            showscale=False,
+            hovertemplate="<b>%{location}</b><br>Dominant Genotype: <b>%{text}</b><extra></extra>",
+            text=ctry_dom["genotype"],
+            marker_line_color="rgba(0,0,0,0.2)",
+            marker_line_width=0.5,
+        ))
+        
+    elif map_mode == "frequency" and selected_gt != "ALL":
+        # Frequency of selected genotype per country
+        counts = df_valid.groupby("Country_standard").agg(
+            total=("genotype", "count"),
+            target=("genotype", lambda s: (s == selected_gt).sum())
+        ).reset_index()
+        counts["freq_pct"] = (counts["target"] / counts["total"]) * 100
+        
+        fig.add_trace(go.Choropleth(
+            locations=counts["Country_standard"],
+            locationmode="country names",
+            z=counts["freq_pct"],
+            colorscale="Teal",
+            colorbar=dict(title=dict(text=f"Genotype {selected_gt} %", side="top"), orientation="h", x=0.04, y=0.02, len=0.46),
+            hovertemplate="<b>%{location}</b><br>Genotype " + str(selected_gt) + " Share: <b>%{z:.1f}%</b><extra></extra>",
+            marker_line_color="rgba(0,0,0,0.2)",
+            marker_line_width=0.5,
+        ))
+        title_text = f"Genotype {selected_gt} Frequency Share (%)"
+        
+    else: # Diversity mode (Shannon index per country)
+        def calc_shannon_ctry(s):
+            counts = s.value_counts()
+            props = counts / counts.sum()
+            return -np.sum(props * np.log(props + 1e-12))
+            
+        ctry_div = df_valid.groupby("Country_standard")["genotype"].apply(calc_shannon_ctry).reset_index(name="shannon")
+        
+        fig.add_trace(go.Choropleth(
+            locations=ctry_div["Country_standard"],
+            locationmode="country names",
+            z=ctry_div["shannon"],
+            colorscale="Viridis",
+            colorbar=dict(title=dict(text="Shannon Index (H')", side="top"), orientation="h", x=0.04, y=0.02, len=0.46),
+            hovertemplate="<b>%{location}</b><br>Shannon Diversity Index: <b>%{z:.2f}</b><extra></extra>",
+            marker_line_color="rgba(0,0,0,0.2)",
+            marker_line_width=0.5,
+        ))
+        title_text = "Genotype Co-circulation Diversity (Shannon Index)"
+        
+    fig.update_geos(
+        projection_type="equirectangular",
+        showcountries=True,
+        countrycolor="rgba(0,0,0,0.2)",
+        showsubunits=True,
+        fitbounds=False,
+        lataxis_range=[-65, 85],
+        domain=dict(x=[0, 1], y=[0, 1]),
+    )
+    fig.update_layout(
+        height=460, margin=dict(t=30, b=0, l=0, r=0), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
+    )
+    return fig
+
+
+@callback(
+    Output("geno-region-heatmap-graph", "figure"),
+    Output("geno-diversity-ranking-graph", "figure"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data"),
+    Input("geno-heatmap-mode", "value"),
+    Input("geno-diversity-scope", "value"),
+)
+def update_geno_heatmap_and_diversity(filtered_json, virus, heat_mode, div_scope):
+    df = _df_from_json(filtered_json)
+    if df.empty or "genotype" not in df.columns:
+        return _empty_plot("No genotype data available"), _empty_plot("No diversity data available")
+        
+    df_valid = df[df["genotype"].notna() & (df["genotype"] != "Unknown")].copy()
+    if df_valid.empty:
+        return _empty_plot("No genotype data available"), _empty_plot("No diversity data available")
+        
+    # 1. HEATMAP (Genotype x WHO Region)
+    if "WHO_Regions" in df_valid.columns:
+        pivot = pd.crosstab(df_valid["genotype"], df_valid["WHO_Regions"])
+        if heat_mode == "pct":
+            pivot_pct = pivot.div(pivot.sum(axis=0), axis=1) * 100
+            z_data = pivot_pct.values
+            hover_template = "Genotype: <b>%{y}</b><br>Region: <b>%{x}</b><br>Share: <b>%{z:.1f}%</b><extra></extra>"
+            colorbar_title = "Share (%)"
+        else:
+            z_data = pivot.values
+            hover_template = "Genotype: <b>%{y}</b><br>Region: <b>%{x}</b><br>Sequences: <b>%{z:,}</b><extra></extra>"
+            colorbar_title = "Sequences"
+            
+        fig_heat = go.Figure(go.Heatmap(
+            z=z_data,
+            x=pivot.columns.tolist(),
+            y=pivot.index.tolist(),
+            colorscale="YlGnBu",
+            colorbar=dict(title=dict(text=colorbar_title, side="top")),
+            hovertemplate=hover_template
+        ))
+        fig_heat.update_layout(
+            height=360, margin=dict(t=20, b=40, l=60, r=20),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(title="WHO Region"), yaxis=dict(title="Genotype")
+        )
+    else:
+        fig_heat = _empty_plot("WHO Region information missing")
+        
+    # 2. DIVERSITY RANKING
+    def calc_shannon_val(s):
+        counts = s.value_counts()
+        props = counts / counts.sum()
+        return -np.sum(props * np.log(props + 1e-12))
+        
+    col_scope = "WHO_Regions" if div_scope == "region" and "WHO_Regions" in df_valid.columns else "Country_standard"
+    if col_scope in df_valid.columns:
+        div_scores = df_valid.groupby(col_scope)["genotype"].apply(calc_shannon_val).reset_index(name="shannon")
+        div_scores = div_scores.sort_values("shannon", ascending=True).tail(10)
+        
+        fig_div = go.Figure(go.Bar(
+            x=div_scores["shannon"],
+            y=div_scores[col_scope],
+            orientation="h",
+            marker=dict(color="#3B82F6", cornerradius=4),
+            hovertemplate="<b>%{y}</b><br>Shannon Diversity Index: <b>%{x:.2f}</b><extra></extra>"
+        ))
+        fig_div.update_layout(
+            height=320, margin=dict(t=20, b=30, l=120, r=20),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(title="Shannon Index (H')"), yaxis=dict(title="")
+        )
+    else:
+        fig_div = _empty_plot("No diversity hierarchy available")
+        
+    return fig_heat, fig_div
+
+
+@callback(
+    Output("geno-scatter-signals-graph", "figure"),
+    Output("geno-signals-table", "children"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data"),
+)
+def update_geno_signals(filtered_json, virus):
+    df = _df_from_json(filtered_json)
+    if df.empty or "genotype" not in df.columns or "Year" not in df.columns:
+        return _empty_plot("No temporal genotype signals available"), html.Div("No signals data", className="text-muted p-3")
+        
+    df_valid = df[df["genotype"].notna() & (df["genotype"] != "Unknown")].copy()
+    df_valid["Year_num"] = pd.to_numeric(df_valid["Year"], errors="coerce")
+    df_valid = df_valid.dropna(subset=["Year_num"])
+    
+    if df_valid.empty:
+        return _empty_plot("No temporal genotype signals available"), html.Div("No signals data", className="text-muted p-3")
+        
+    hist_df = df_valid[df_valid["Year_num"] < 2020]
+    rec_df = df_valid[df_valid["Year_num"] >= 2020]
+    
+    hist_props = (hist_df["genotype"].value_counts() / len(hist_df) * 100) if not hist_df.empty else pd.Series(dtype=float)
+    rec_props = (rec_df["genotype"].value_counts() / len(rec_df) * 100) if not rec_df.empty else pd.Series(dtype=float)
+    
+    all_gts = sorted(list(set(hist_props.index).union(set(rec_props.index))))
+    
+    signals_data = []
+    for g in all_gts:
+        h_val = float(hist_props.get(g, 0.0))
+        r_val = float(rec_props.get(g, 0.0))
+        diff = r_val - h_val
+        rec_count = int((rec_df["genotype"] == g).sum())
+        
+        status = "Increasing" if diff > 1.0 else ("Decreasing" if diff < -1.0 else "Stable")
+        signals_data.append({
+            "Genotype": g,
+            "Historical %": round(h_val, 1),
+            "Recent %": round(r_val, 1),
+            "Shift %": round(diff, 1),
+            "Recent Count": rec_count,
+            "Status": status
+        })
+        
+    sig_df = pd.DataFrame(signals_data)
+    
+    # 1. SCATTER PLOT
+    fig_scatter = go.Figure()
+    max_val = max(sig_df["Historical %"].max(), sig_df["Recent %"].max(), 10.0) if not sig_df.empty else 100.0
+    
+    # Diagonal reference y=x
+    fig_scatter.add_trace(go.Scatter(
+        x=[0, max_val], y=[0, max_val],
+        mode="lines", name="No Change (y=x)",
+        line=dict(color="rgba(148,163,184,0.5)", dash="dash")
+    ))
+    
+    if not sig_df.empty:
+        fig_scatter.add_trace(go.Scatter(
+            x=sig_df["Historical %"],
+            y=sig_df["Recent %"],
+            mode="markers+text",
+            text=sig_df["Genotype"],
+            textposition="top center",
+            marker=dict(
+                size=12,
+                color=sig_df["Shift %"],
+                colorscale="Tropic",
+                showscale=True,
+                colorbar=dict(title=dict(text="Shift %", side="top"))
+            ),
+            hovertemplate="<b>Genotype %{text}</b><br>Historical Share: %{x:.1f}%<br>Recent Share: %{y:.1f}%<br>Shift: %{marker.color:+.1f}%<extra></extra>"
+        ))
+        
+    fig_scatter.update_layout(
+        height=350, margin=dict(t=30, b=40, l=50, r=20),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(title="Historical Frequency % (pre-2020)"),
+        yaxis=dict(title="Recent Frequency % (>=2020)")
+    )
+    
+    # 2. SIGNALS TABLE
+    table_df = sig_df.sort_values("Shift %", ascending=False).head(6)
+    
+    table_comp = dash_table.DataTable(
+        data=table_df.to_dict("records"),
+        columns=[{"name": col, "id": col} for col in table_df.columns],
+        style_table={"overflowX": "auto"},
+        style_cell={"fontFamily": "IBM Plex Sans, sans-serif", "fontSize": "11px", "padding": "6px 8px", "textAlign": "left"},
+        style_header={"backgroundColor": "#f8fafc", "fontWeight": "700", "fontSize": "11px"},
+        style_data_conditional=[
+            {"if": {"filter_query": '{Status} = "Increasing"', "column_id": "Status"}, "color": "#10B981", "fontWeight": "bold"},
+            {"if": {"filter_query": '{Status} = "Decreasing"', "column_id": "Status"}, "color": "#EF4444", "fontWeight": "bold"},
+        ]
+    )
+    
+    return fig_scatter, table_comp
+
+
+# =============================================================================
+# MUTATIONS TAB CALLBACKS
+# =============================================================================
+from itertools import combinations
+
+def _ensure_column(mut_df, seq_df, col):
+    """Ensures `col` exists in mut_df by bringing it from seq_df on 'ID' if needed, avoiding duplicate columns."""
+    if mut_df.empty:
+        return mut_df
+    if col in mut_df.columns:
+        return mut_df
+    if "ID" in mut_df.columns and "ID" in seq_df.columns and col in seq_df.columns:
+        right = seq_df[["ID", col]].drop_duplicates()
+        return mut_df.merge(right, on="ID", how="inner")
+    return mut_df
+
+
+@callback(
+    Output("mut-kpi-unique", "children"),
+    Output("mut-kpi-high-freq", "children"),
+    Output("mut-kpi-countries", "children"),
+    Output("mut-kpi-signals", "children"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data"),
+)
+def update_mutation_kpi_summary(filtered_json, virus):
+    data = get_data_store()
+    selected_virus = virus or "HBV"
+    df = _df_from_json(filtered_json)
+    
+    mut_data = data.get("hbv_mut") if selected_virus == "HBV" else data.get("hcv_mut")
+    if mut_data is None or mut_data.empty or df.empty:
+        return "--", "--", "--", "--"
+        
+    if "ID" in mut_data.columns and "ID" in df.columns:
+        filtered_mut = mut_data[mut_data["ID"].isin(df["ID"].unique())]
+    else:
+        filtered_mut = mut_data
+        
+    if filtered_mut.empty or "mutation" not in filtered_mut.columns:
+        return "0", "0", "0", "0"
+        
+    # 1. Unique Mutations
+    unique_muts = filtered_mut["mutation"].dropna().unique()
+    unique_count = len(unique_muts)
+    
+    # 2. High Frequency (>5% share)
+    total_seqs = df["ID"].nunique() if "ID" in df.columns else max(len(df), 1)
+    counts = filtered_mut.groupby("mutation")["ID"].nunique() if "ID" in filtered_mut.columns else filtered_mut["mutation"].value_counts()
+    freq_pcts = (counts / total_seqs) * 100
+    high_freq_count = (freq_pcts > 5.0).sum()
+    
+    # 3. Countries Affected
+    if "ID" in filtered_mut.columns and "Country_standard" in df.columns and "ID" in df.columns:
+        mut_ids = set(filtered_mut["ID"].dropna().unique())
+        affected_ctries = df[df["ID"].isin(mut_ids)]["Country_standard"].dropna().nunique()
+    elif "Country_standard" in df.columns:
+        affected_ctries = df["Country_standard"].dropna().nunique()
+    else:
+        affected_ctries = 0
+        
+    # 4. Emerging Signals (>=2020 vs <2020)
+    merged = _ensure_column(filtered_mut, df, "Year")
+    if not merged.empty and "Year" in merged.columns and "ID" in merged.columns:
+        merged["Year_num"] = pd.to_numeric(merged["Year"], errors="coerce")
+        
+        hist_ids = df[df["Year"] < 2020]["ID"].unique() if ("Year" in df.columns and "ID" in df.columns) else []
+        rec_ids = df[df["Year"] >= 2020]["ID"].unique() if ("Year" in df.columns and "ID" in df.columns) else []
+        
+        hist_n = max(len(hist_ids), 1)
+        rec_n = max(len(rec_ids), 1)
+        
+        hist_counts = merged[merged["ID"].isin(hist_ids)].groupby("mutation")["ID"].nunique() / hist_n * 100
+        rec_counts = merged[merged["ID"].isin(rec_ids)].groupby("mutation")["ID"].nunique() / rec_n * 100
+        
+        diff = (rec_counts - hist_counts).dropna()
+        emerging_count = (diff >= 1.0).sum()
+    else:
+        emerging_count = 0
+        
+    return f"{unique_count:,}", f"{high_freq_count}", f"{affected_ctries}", f"{emerging_count}"
+
+
+@callback(
+    Output("mut-geo-map-graph", "figure"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data"),
+)
+def update_mut_geo_map(filtered_json, virus):
+    data = get_data_store()
+    selected_virus = virus or "HBV"
+    df = _df_from_json(filtered_json)
+    mut_data = data.get("hbv_mut") if selected_virus == "HBV" else data.get("hcv_mut")
+    
+    if mut_data is None or mut_data.empty or df.empty:
+        return _empty_world("No geographic mutation data available")
+        
+    if "ID" in mut_data.columns and "ID" in df.columns:
+        filtered_mut = mut_data[mut_data["ID"].isin(df["ID"].unique())]
+    else:
+        filtered_mut = mut_data
+        
+    merged = _ensure_column(filtered_mut, df, "Country_standard")
+    if merged.empty or "Country_standard" not in merged.columns:
+        return _empty_world("No geographic mutation data available")
+        
+    ctry_muts = merged.groupby("Country_standard").agg(
+        total_mutations=("mutation", "count"),
+        unique_mutations=("mutation", "nunique")
+    ).reset_index()
+    
+    fig = go.Figure(go.Choropleth(
+        locations=ctry_muts["Country_standard"],
+        locationmode="country names",
+        z=ctry_muts["total_mutations"],
+        colorscale="Purples",
+        colorbar=dict(title=dict(text="Mutations", side="top", font=dict(size=10)), orientation="h", x=0.02, y=0.02, len=0.34, thickness=8, tickfont=dict(size=8)),
+        hovertemplate="<b>%{location}</b><br>Detected Mutations: <b>%{z:,}</b><br>Unique Variants: <b>%{text:,}</b><extra></extra>",
+        text=ctry_muts["unique_mutations"],
+        marker_line_color="rgba(0,0,0,0.2)",
+        marker_line_width=0.5,
+    ))
+    
+    fig.update_geos(
+        projection_type="equirectangular",
+        showcountries=True,
+        countrycolor="rgba(0,0,0,0.2)",
+        showsubunits=True,
+        fitbounds=False,
+        lataxis_range=[-65, 85],
+        domain=dict(x=[0, 1], y=[0, 1]),
+    )
+    fig.update_layout(
+        height=230, margin=dict(t=10, b=0, l=0, r=0), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
+    )
+    return fig
+
+
+@callback(
+    Output("mut-lollipop-graph", "figure"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data"),
+    Input("mut-protein-selector", "value"),
+)
+def update_mut_lollipop(filtered_json, virus, protein_filter):
+    data = get_data_store()
+    selected_virus = virus or "HBV"
+    df = _df_from_json(filtered_json)
+    mut_data = data.get("hbv_mut") if selected_virus == "HBV" else data.get("hcv_mut")
+    
+    if mut_data is None or mut_data.empty or df.empty or "mutation" not in mut_data.columns:
+        return _empty_plot("No protein position data available")
+        
+    if "ID" in mut_data.columns and "ID" in df.columns:
+        filtered_mut = mut_data[mut_data["ID"].isin(df["ID"].unique())].copy()
+    else:
+        filtered_mut = mut_data.copy()
+        
+    if filtered_mut.empty:
+        return _empty_plot("No protein position data available")
+        
+    col = "drug" if selected_virus == "HBV" and "drug" in filtered_mut.columns else ("gene" if "gene" in filtered_mut.columns else None)
+    if protein_filter != "ALL" and col and col in filtered_mut.columns:
+        filtered_mut = filtered_mut[filtered_mut[col] == protein_filter]
+        
+    if filtered_mut.empty:
+        return _empty_plot(f"No mutations found for {protein_filter}")
+        
+    # Extract amino-acid position number
+    def parse_pos(m):
+        match = re.search(r'\d+', str(m))
+        return int(match.group()) if match else None
+        
+    filtered_mut["pos"] = filtered_mut["mutation"].apply(parse_pos)
+    filtered_mut = filtered_mut.dropna(subset=["pos"])
+    
+    if filtered_mut.empty:
+        return _empty_plot("Could not parse amino-acid position numbers")
+        
+    total_seqs = max(df["ID"].nunique() if "ID" in df.columns else len(df), 1)
+    pos_counts = filtered_mut.groupby(["pos", "mutation"]).agg(
+        count=("ID", "nunique") if "ID" in filtered_mut.columns else ("mutation", "count")
+    ).reset_index()
+    pos_counts["freq_pct"] = (pos_counts["count"] / total_seqs) * 100
+    # Filter out mutations with frequency less than 5%
+    pos_counts = pos_counts[pos_counts["freq_pct"] >= 5.0]
+    
+    if pos_counts.empty:
+        return _empty_plot("No mutations found with frequency ≥ 5%")
+        
+    pos_counts = pos_counts.sort_values("pos")
+    
+    fig = go.Figure()
+    
+    # Add vertical lollipop stems
+    for _, row in pos_counts.iterrows():
+        fig.add_shape(
+            type="line",
+            x0=row["pos"], y0=0,
+            x1=row["pos"], y1=row["freq_pct"],
+            line=dict(color="#64748B", width=1.5)
+        )
+        
+    # Add lollipop head markers
+    fig.add_trace(go.Scatter(
+            x=pos_counts["pos"],
+            y=pos_counts["freq_pct"],
+            mode="markers",
+            text=pos_counts["mutation"],
+            marker=dict(
+                size=np.clip(pos_counts["freq_pct"] * 2 + 8, 8, 24),
+                color=pos_counts["freq_pct"],
+                colorscale="Viridis",
+                showscale=True,
+                colorbar=dict(title=dict(text="Share %", side="top"))
+            ),
+            hovertemplate="<b>Mutation: %{text}</b><br>AA Position: <b>%{x}</b><br>Frequency Share: <b>%{y:.2f}%</b><extra></extra>"
+        ))
+        
+    _label_declutter(fig, pos_counts["pos"].tolist(), pos_counts["freq_pct"].tolist(),
+                      pos_counts["mutation"].tolist(), min_gap_frac=0.035)
+    
+    fig.update_layout(
+        height=360, margin=dict(t=30, b=40, l=50, r=20),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(title="Amino Acid Position", showgrid=True, gridcolor="#E2E8F0"),
+        yaxis=dict(title="Frequency Share (%)", showgrid=True, gridcolor="#E2E8F0")
+    )
+    return fig
+
+
+@callback(
+    Output("mut-priority-table", "children"),
+    Output("mut-genotype-heatmap-graph", "figure"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data"),
+)
+def update_mut_priority_and_heatmap(filtered_json, virus):
+    data = get_data_store()
+    selected_virus = virus or "HBV"
+    df = _df_from_json(filtered_json)
+    mut_data = data.get("hbv_mut") if selected_virus == "HBV" else data.get("hcv_mut")
+    
+    if mut_data is None or mut_data.empty or df.empty or "mutation" not in mut_data.columns:
+        return html.Div("No priority mutations available", className="text-muted p-3"), _empty_plot("No genotype association data")
+        
+    if "ID" in mut_data.columns and "ID" in df.columns:
+        filtered_mut = mut_data[mut_data["ID"].isin(df["ID"].unique())].copy()
+    else:
+        filtered_mut = mut_data.copy()
+        
+    merged = _ensure_column(filtered_mut, df, "genotype")
+        
+    # 1. PRIORITY MUTATION TABLE
+    total_seqs = max(df["ID"].nunique() if "ID" in df.columns else len(df), 1)
+    if "type" in filtered_mut.columns:
+        prio_df = filtered_mut[filtered_mut["type"].isin(["antiviral_resistance", "vaccine_escape"])].copy()
+    else:
+        prio_df = filtered_mut.copy()
+        
+    if not prio_df.empty:
+        col_target = "drug" if selected_virus == "HBV" and "drug" in prio_df.columns else ("gene" if "gene" in prio_df.columns else "type")
+        summary_prio = prio_df.groupby(["mutation", col_target]).agg(
+            count=("ID", "nunique") if "ID" in prio_df.columns else ("mutation", "count")
+        ).reset_index()
+        summary_prio["Frequency %"] = (summary_prio["count"] / total_seqs * 100).round(1)
+        summary_prio = summary_prio.sort_values("Frequency %", ascending=False).head(6)
+        summary_prio["Significance"] = summary_prio[col_target].astype(str).str.title()
+        
+        table_prio = dash_table.DataTable(
+            data=summary_prio[["mutation", "Significance", "Frequency %"]].to_dict("records"),
+            columns=[{"name": col, "id": col} for col in ["mutation", "Significance", "Frequency %"]],
+            style_table={"overflowX": "auto"},
+            style_cell={"fontFamily": "IBM Plex Sans, sans-serif", "fontSize": "11px", "padding": "6px 8px", "textAlign": "left"},
+            style_header={"backgroundColor": "#f8fafc", "fontWeight": "700", "fontSize": "11px"}
+        )
+    else:
+        table_prio = html.Div("No priority resistance/escape variants detected", className="text-muted p-3")
+        
+    # 2. MUTATION X GENOTYPE HEATMAP
+    if not merged.empty and "genotype" in merged.columns:
+        merged_clean = merged[merged["genotype"].notna() & (merged["genotype"] != "Unknown")].copy()
+        top_muts = merged_clean["mutation"].value_counts().head(10).index.tolist()
+        merged_top = merged_clean[merged_clean["mutation"].isin(top_muts)]
+        
+        if not merged_top.empty:
+            pivot = pd.crosstab(merged_top["mutation"], merged_top["genotype"])
+            pivot_pct = pivot.div(pivot.sum(axis=0), axis=1) * 100
+            
+            fig_heat = go.Figure(go.Heatmap(
+                z=pivot_pct.values,
+                x=pivot_pct.columns.tolist(),
+                y=pivot_pct.index.tolist(),
+                colorscale="YlOrRd",
+                colorbar=dict(title=dict(text="Share (%)", side="top")),
+                hovertemplate="Mutation: <b>%{y}</b><br>Genotype: <b>%{x}</b><br>Prevalence Share: <b>%{z:.1f}%</b><extra></extra>"
+            ))
+            fig_heat.update_layout(
+                height=350, margin=dict(t=20, b=40, l=60, r=20),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(title="Viral Genotype"), yaxis=dict(title="Mutation")
+            )
+        else:
+            fig_heat = _empty_plot("No genotype association data")
+    else:
+        fig_heat = _empty_plot("Genotype metadata not linked")
+        
+    return table_prio, fig_heat
+
+
+@callback(
+    Output("mut-cooccurrence-table", "children"),
+    Output("mut-emerging-signals-graph", "figure"),
+    Input("filtered-store", "data"),
+    Input("selected-virus", "data"),
+)
+def update_mut_cooccurrence_and_signals(filtered_json, virus):
+    data = get_data_store()
+    selected_virus = virus or "HBV"
+    df = _df_from_json(filtered_json)
+    mut_data = data.get("hbv_mut") if selected_virus == "HBV" else data.get("hcv_mut")
+    
+    if mut_data is None or mut_data.empty or df.empty or "mutation" not in mut_data.columns:
+        return html.Div("No co-occurrence data", className="text-muted p-3"), _empty_plot("No emerging signals data")
+        
+    if "ID" in mut_data.columns and "ID" in df.columns:
+        filtered_mut = mut_data[mut_data["ID"].isin(df["ID"].unique())].copy()
+    else:
+        filtered_mut = mut_data.copy()
+        
+    # 1. CO-OCCURRING MUTATIONS TABLE
+    if "ID" in filtered_mut.columns:
+        grouped = filtered_mut.groupby("ID")["mutation"].apply(lambda s: sorted(list(set(s.dropna()))))
+        pair_counts = {}
+        for mut_list in grouped:
+            if len(mut_list) >= 2:
+                for pair in combinations(mut_list, 2):
+                    pair_str = f"{pair[0]} + {pair[1]}"
+                    pair_counts[pair_str] = pair_counts.get(pair_str, 0) + 1
+                    
+        if pair_counts:
+            pair_df = pd.DataFrame(list(pair_counts.items()), columns=["Mutation Pair", "Genomes Co-Detected"]).sort_values("Genomes Co-Detected", ascending=False).head(6)
+            table_co = dash_table.DataTable(
+                data=pair_df.to_dict("records"),
+                columns=[{"name": col, "id": col} for col in pair_df.columns],
+                style_table={"overflowX": "auto"},
+                style_cell={"fontFamily": "IBM Plex Sans, sans-serif", "fontSize": "11px", "padding": "6px 8px", "textAlign": "left"},
+                style_header={"backgroundColor": "#f8fafc", "fontWeight": "700", "fontSize": "11px"}
+            )
+        else:
+            table_co = html.Div("No co-occurring mutation pairs detected", className="text-muted p-3")
+    else:
+        table_co = html.Div("No sequence ID mapping available", className="text-muted p-3")
+        
+    # 2. EMERGING MUTATION SIGNALS SCATTER
+    merged = _ensure_column(filtered_mut, df, "Year")
+    if not merged.empty and "Year" in merged.columns and "ID" in merged.columns:
+        merged["Year_num"] = pd.to_numeric(merged["Year"], errors="coerce")
+        merged = merged.dropna(subset=["Year_num"])
+        
+        hist_df = merged[merged["Year_num"] < 2020]
+        rec_df = merged[merged["Year_num"] >= 2020]
+        
+        hist_n = max(df[df["Year"] < 2020]["ID"].nunique(), 1) if ("Year" in df.columns and "ID" in df.columns) else 1
+        rec_n = max(df[df["Year"] >= 2020]["ID"].nunique(), 1) if ("Year" in df.columns and "ID" in df.columns) else 1
+        
+        hist_props = (hist_df.groupby("mutation")["ID"].nunique() / hist_n * 100) if not hist_df.empty else pd.Series(dtype=float)
+        rec_props = (rec_df.groupby("mutation")["ID"].nunique() / rec_n * 100) if not rec_df.empty else pd.Series(dtype=float)
+        
+        all_muts = sorted(list(set(hist_props.index).union(set(rec_props.index))))
+        signals = []
+        for m in all_muts:
+            h_v = float(hist_props.get(m, 0.0))
+            r_v = float(rec_props.get(m, 0.0))
+            diff = r_v - h_v
+            signals.append({"Mutation": m, "Historical %": round(h_v, 2), "Recent %": round(r_v, 2), "Shift %": round(diff, 2)})
+            
+        sig_df = pd.DataFrame(signals)
+        fig_sig = go.Figure()
+        max_val = max(sig_df["Historical %"].max(), sig_df["Recent %"].max(), 5.0) if not sig_df.empty else 10.0
+        
+        fig_sig.add_trace(go.Scatter(
+            x=[0, max_val], y=[0, max_val],
+            mode="lines", name="No Change (y=x)",
+            line=dict(color="rgba(148,163,184,0.5)", dash="dash")
+        ))
+        
+        if not sig_df.empty:
+                    fig_sig.add_trace(go.Scatter(
+                        x=sig_df["Historical %"],
+                        y=sig_df["Recent %"],
+                        mode="markers",
+                        text=sig_df["Mutation"],
+                        marker=dict(
+                            size=12,
+                            color=sig_df["Shift %"],
+                            colorscale="Reds",
+                            showscale=True,
+                            colorbar=dict(title=dict(text="Shift %", side="top"))
+                        )),
+                        
+        _label_declutter(
+                        fig_sig,
+                        sig_df["Historical %"].tolist(),
+                        sig_df["Recent %"].tolist(),
+                        sig_df["Mutation"].tolist(),
+                        top_n=12,
+                        min_gap_frac=0.05,
+                        y_key=lambda i: abs(sig_df["Shift %"].iloc[i]),  # prioritize by biggest shift, not raw position
+                    )
+                )
+            
+        fig_sig.update_layout(
+            height=360, margin=dict(t=30, b=40, l=50, r=20),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(title="Historical Frequency Share % (pre-2020)"),
+            yaxis=dict(title="Recent Frequency Share % (>=2020)")
+        )
+    else:
+        fig_sig = _empty_plot("No temporal sequence metadata available")
+        
+    return table_co, fig_sig
