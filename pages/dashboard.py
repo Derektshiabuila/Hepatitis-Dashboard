@@ -3397,16 +3397,17 @@ def create_dashboard_layout():
                                                     className="w-50 ms-1 fw-bold",
                                                 ),
                                             ], className="d-flex justify-content-between pt-2 border-top mt-auto"),
-                                        ], className="p-3 d-flex flex-column h-100 justify-content-between")
+                                        ], className="p-3 d-flex flex-column gap-2 w-100", style={"display": "flex", "flexDirection": "column"})
                                     ],
                                     className="h-100 shadow-sm border-0 bg-white rounded-3",
                                     id="common-filters"
                                 )
                             ],
                             xs=12,
-                            lg=4,
+                            md=4,
+                            lg=3,
                             xl=3,
-                            className="mb-4 mb-lg-0 d-flex flex-column",
+                            className="mb-4 mb-md-0 d-flex flex-column",
                         ),
                         # RIGHT: Global Distribution Map
                         dbc.Col(
@@ -3547,6 +3548,7 @@ def create_dashboard_layout():
                                 )
                             ],
                             xs=12,
+                            md=8,
                             lg=8,
                             xl=9,
                             className="d-flex flex-column",
