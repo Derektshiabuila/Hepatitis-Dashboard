@@ -7932,7 +7932,6 @@ def download_priority_table(n_clicks, priority_json, virus):
     Output('country-dropdown', 'options'),
     Output('genotype-dropdown', 'options'),
     Input("selected-virus", "data"),
-    prevent_initial_call=True
 )
 def init_controls(virus):
     data = get_data_store()

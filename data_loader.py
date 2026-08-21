@@ -518,32 +518,14 @@ def load_and_preprocess_data():
         "results/who_gho/who_gho_hepatitis_country_profiles.tsv"
     ]
     
-    # Check if cache is valid (exists and newer than all existing source files)
-    cache_valid = False
+    # Check if preprocessed cache exists
     if os.path.exists(cache_file):
-        try:
-            cache_mtime = os.path.getmtime(cache_file)
-            cache_valid = True
-            for sf in source_files:
-                sf_path = get_data_path(sf)
-                if os.path.exists(sf_path) and os.path.getmtime(sf_path) > cache_mtime:
-                    cache_valid = False
-                    print(f"🔄 Cache invalidated: {sf} has been updated.")
-                    break
-        except Exception as e:
-            print(f"⚠️ Error checking cache mtimes: {e}")
-            cache_valid = False
-                
-    if cache_valid:
         print("🚀 Loading preprocessed data from cache...")
         try:
             import pickle
             with open(cache_file, 'rb') as f:
                 data_store = pickle.load(f)
-                if 'who_gho_df' not in data_store or data_store.get('who_gho_df') is None or (isinstance(data_store.get('who_gho_df'), pd.DataFrame) and data_store['who_gho_df'].empty):
-                    cache_valid = False
-                    print("🔄 Cache missing or has empty 'who_gho_df'. Invalidating cache.")
-                else:
+                if isinstance(data_store, dict) and 'hbv_data' in data_store and not data_store['hbv_data'].empty:
                     print("✅ Cache loaded successfully.")
                     return data_store
         except Exception as e:
