@@ -498,6 +498,20 @@ def country_name_from_iso3(iso3):
         pass
     return iso3
 
+def compress_dataframe_memory(df):
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return df
+    df = df.copy()
+    for col in df.columns:
+        if df[col].dtype in ['object', 'str', 'string'] or str(df[col].dtype).startswith('string'):
+            if df[col].nunique() < len(df) * 0.7:
+                df[col] = df[col].astype(str).astype('category')
+        elif df[col].dtype == 'int64':
+            df[col] = pd.to_numeric(df[col], downcast='integer')
+        elif df[col].dtype == 'float64':
+            df[col] = pd.to_numeric(df[col], downcast='float')
+    return df
+
 def load_and_preprocess_data():
     cache_file = get_data_path("results/preprocessed_data_store.pkl")
     
@@ -986,6 +1000,15 @@ def load_and_preprocess_data():
             'who_gho_df': who_gho_df
         }
         
+        # --- Optimize RAM Footprint ---
+        compressed_store = {}
+        for k, v in data_store.items():
+            if isinstance(v, pd.DataFrame):
+                compressed_store[k] = compress_dataframe_memory(v)
+            else:
+                compressed_store[k] = v
+        data_store = compressed_store
+
         # Save to cache
         print("💾 Saving preprocessed data to cache...")
         try:
