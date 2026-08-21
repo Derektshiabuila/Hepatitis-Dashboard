@@ -4202,7 +4202,6 @@ def create_dashboard_layout():
                                         id="geno-map-mode",
                                         options=[
                                             {"label": "Dominant Genotype", "value": "dominant"},
-                                            {"label": "Genotype Frequency", "value": "frequency"},
                                             {"label": "Diversity Index", "value": "diversity"},
                                         ],
                                         value="dominant",
@@ -8874,10 +8873,10 @@ def update_geno_distribution_map(filtered_json, virus, map_mode, selected_gt):
             colorbar=dict(
                 title=dict(text=c_title, side="top", font=dict(size=10, color="#334155")),
                 orientation="h",
-                x=0.24,
+                x=0.10,
                 xanchor="left",
-                y=0.12,
-                len=0.30,
+                y=0.03,
+                len=0.26,
                 thickness=10,
                 tickfont=dict(size=8, color="#475569")
             ),
@@ -8902,10 +8901,10 @@ def update_geno_distribution_map(filtered_json, virus, map_mode, selected_gt):
             colorbar=dict(
                 title=dict(text="Shannon Index (H')", side="top", font=dict(size=10, color="#334155")),
                 orientation="h",
-                x=0.24,
+                x=0.10,
                 xanchor="left",
-                y=0.12,
-                len=0.30,
+                y=0.03,
+                len=0.26,
                 thickness=10,
                 tickfont=dict(size=8, color="#475569")
             ),
