@@ -8740,7 +8740,7 @@ def update_genotype_kpi_summary(filtered_json, virus):
     # 1. Observed Count
     observed_gts = sorted(df_valid["genotype"].astype(str).unique())
     observed_count = len(observed_gts)
-    opts = [{"label": "All Genotypes", "value": "ALL"}] + [{"label": f"Genotype {g}", "value": g} for g in observed_gts]
+    opts = [{"label": "All Genotypes", "value": "ALL"}] + [{"label": str(g), "value": g} for g in observed_gts]
     
     # 2. Dominant Genotype
     gt_counts = df_valid["genotype"].value_counts()
