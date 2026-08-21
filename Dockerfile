@@ -81,5 +81,5 @@ ENV RDP5_WINE=wine
 # Expose the dashboard port
 EXPOSE 8051
 
-# Start the dashboard using Gunicorn
-CMD ["gunicorn", "Full_Hepatitis_page:server", "--bind", "0.0.0.0:8051", "--workers", "2", "--timeout", "120"]
+# Start the dashboard using Gunicorn (1 worker + 4 threads to share memory within 512MB RAM limit)
+CMD ["gunicorn", "Full_Hepatitis_page:server", "--bind", "0.0.0.0:8051", "--workers", "1", "--threads", "4", "--timeout", "120"]
