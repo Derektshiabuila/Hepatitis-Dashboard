@@ -8836,25 +8836,45 @@ def update_geno_distribution_map(filtered_json, virus, map_mode, selected_gt):
             marker_line_width=0.5,
         ))
         
-    elif map_mode == "frequency" and selected_gt != "ALL":
-        # Frequency of selected genotype per country
-        counts = df_valid.groupby("Country_standard").agg(
-            total=("genotype", "count"),
-            target=("genotype", lambda s: (s == selected_gt).sum())
-        ).reset_index()
-        counts["freq_pct"] = (counts["target"] / counts["total"]) * 100
-        
+    elif map_mode == "frequency":
+        if selected_gt and str(selected_gt).upper() != "ALL":
+            # Frequency of selected genotype per country
+            target_gt = selected_gt
+            counts = df_valid.groupby("Country_standard").agg(
+                total=("genotype", "count"),
+                target=("genotype", lambda s: (s == target_gt).sum())
+            ).reset_index()
+            counts["freq_pct"] = (counts["target"] / counts["total"]) * 100
+            c_title = f"Genotype {target_gt} Share (%)"
+            hover_lbl = f"Genotype {target_gt} Share"
+        else:
+            # Frequency (%) of the dominant genotype per country when "ALL" is selected
+            def dom_freq(s):
+                vc = s.value_counts()
+                return (vc.iloc[0] / vc.sum()) * 100 if not vc.empty else 0
+            
+            counts = df_valid.groupby("Country_standard")["genotype"].agg(dom_freq).reset_index(name="freq_pct")
+            c_title = "Dominant Genotype Share (%)"
+            hover_lbl = "Dominant Genotype Share"
+
         fig.add_trace(go.Choropleth(
             locations=counts["Country_standard"],
             locationmode="country names",
             z=counts["freq_pct"],
             colorscale="Teal",
-            colorbar=dict(title=dict(text=f"Genotype {selected_gt} %", side="top"), orientation="h", x=0.04, y=0.02, len=0.46),
-            hovertemplate="<b>%{location}</b><br>Genotype " + str(selected_gt) + " Share: <b>%{z:.1f}%</b><extra></extra>",
+            colorbar=dict(
+                title=dict(text=c_title, side="top", font=dict(size=10, color="#334155")),
+                orientation="h",
+                x=0.03,
+                y=0.06,
+                len=0.32,
+                thickness=10,
+                tickfont=dict(size=8, color="#475569")
+            ),
+            hovertemplate="<b>%{location}</b><br>" + hover_lbl + ": <b>%{z:.1f}%</b><extra></extra>",
             marker_line_color="rgba(0,0,0,0.2)",
             marker_line_width=0.5,
         ))
-        title_text = f"Genotype {selected_gt} Frequency Share (%)"
         
     else: # Diversity mode (Shannon index per country)
         def calc_shannon_ctry(s):
@@ -8869,12 +8889,19 @@ def update_geno_distribution_map(filtered_json, virus, map_mode, selected_gt):
             locationmode="country names",
             z=ctry_div["shannon"],
             colorscale="Viridis",
-            colorbar=dict(title=dict(text="Shannon Index (H')", side="top"), orientation="h", x=0.04, y=0.02, len=0.46),
+            colorbar=dict(
+                title=dict(text="Shannon Index (H')", side="top", font=dict(size=10, color="#334155")),
+                orientation="h",
+                x=0.03,
+                y=0.06,
+                len=0.32,
+                thickness=10,
+                tickfont=dict(size=8, color="#475569")
+            ),
             hovertemplate="<b>%{location}</b><br>Shannon Diversity Index: <b>%{z:.2f}</b><extra></extra>",
             marker_line_color="rgba(0,0,0,0.2)",
             marker_line_width=0.5,
         ))
-        title_text = "Genotype Co-circulation Diversity (Shannon Index)"
         
     fig.update_geos(
         projection_type="equirectangular",
