@@ -8807,8 +8807,16 @@ def update_geno_distribution_map(filtered_json, virus, map_mode, selected_gt):
     fig = go.Figure()
     
     if map_mode == "dominant":
-        # Group by country, find most frequent genotype
-        ctry_dom = df_valid.groupby("Country_standard")["genotype"].agg(lambda s: s.value_counts().index[0]).reset_index()
+        # Group by country, find most frequent genotype AND calculate its percentage frequency & sequence counts
+        def get_dom_stats(s):
+            vc = s.value_counts()
+            top_gt = vc.index[0]
+            top_cnt = int(vc.iloc[0])
+            tot = int(len(s))
+            pct = (top_cnt / tot) * 100
+            return pd.Series([top_gt, pct, top_cnt, tot], index=["genotype", "pct", "count", "total"])
+
+        ctry_dom = df_valid.groupby("Country_standard")["genotype"].apply(get_dom_stats).unstack().reset_index()
         unique_gts = sorted(ctry_dom["genotype"].unique())
         
         # Color scale index
@@ -8830,7 +8838,8 @@ def update_geno_distribution_map(filtered_json, virus, map_mode, selected_gt):
             z=ctry_dom["z_value"],
             colorscale=custom_scale if len(unique_gts) > 1 else [[0, colors[0]], [1, colors[0]]],
             showscale=False,
-            hovertemplate="<b>%{location}</b><br>Dominant Genotype: <b>%{text}</b><extra></extra>",
+            customdata=np.stack((ctry_dom["genotype"], ctry_dom["pct"], ctry_dom["count"], ctry_dom["total"]), axis=-1),
+            hovertemplate="<b>%{location}</b><br>Dominant Genotype: <b>%{customdata[0]}</b><br>Genotype Frequency: <b>%{customdata[1]:.1f}%</b> (%{customdata[2]}/%{customdata[3]} seqs)<extra></extra>",
             text=ctry_dom["genotype"],
             marker_line_color="rgba(0,0,0,0.2)",
             marker_line_width=0.5,
@@ -8865,9 +8874,10 @@ def update_geno_distribution_map(filtered_json, virus, map_mode, selected_gt):
             colorbar=dict(
                 title=dict(text=c_title, side="top", font=dict(size=10, color="#334155")),
                 orientation="h",
-                x=0.03,
-                y=0.06,
-                len=0.32,
+                x=0.24,
+                xanchor="left",
+                y=0.12,
+                len=0.30,
                 thickness=10,
                 tickfont=dict(size=8, color="#475569")
             ),
@@ -8892,9 +8902,10 @@ def update_geno_distribution_map(filtered_json, virus, map_mode, selected_gt):
             colorbar=dict(
                 title=dict(text="Shannon Index (H')", side="top", font=dict(size=10, color="#334155")),
                 orientation="h",
-                x=0.03,
-                y=0.06,
-                len=0.32,
+                x=0.24,
+                xanchor="left",
+                y=0.12,
+                len=0.30,
                 thickness=10,
                 tickfont=dict(size=8, color="#475569")
             ),
